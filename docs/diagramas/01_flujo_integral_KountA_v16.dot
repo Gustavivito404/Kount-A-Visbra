@@ -1,0 +1,100 @@
+digraph KountA_Flujo {
+ graph [label="KOUNT-A / VISBRA — DIAGRAMA DE FLUJO DEL SOFTWARE (v16)",labelloc=t,
+  fontname="DejaVu Sans", fontsize=22, fontcolor="#143C61", bgcolor=white,
+  rankdir=TB, splines=ortho, nodesep=0.40, ranksep=0.62, pad=0.33];
+ node [fontname="DejaVu Sans",fontsize=11,shape=box,style="rounded,filled",fillcolor="#F5FAFE",
+  color="#9FBED5",penwidth=1.2,fontcolor="#17344F",margin="0.17,0.10"];
+ edge [fontname="DejaVu Sans",fontsize=9.2,color="#54758D",arrowsize=.68,penwidth=1.1];
+
+ subgraph cluster_inicio {
+  label="A. Inicio, autorización y selección de actividad";style="rounded,filled";fillcolor="#F0F7FE";color="#C2D8EB";
+  start [label="INICIO\nEjecutar Kount-A",shape=oval,fillcolor="#D3E8FA"];
+  login [label="Autenticar: dueño, ingeniero u operador\nAplicar permisos según rol"];
+  profile [label="Seleccionar perfil\nCargar clases, modelo autorizado y ajustes ArUco"];
+  activity [label="¿Actividad solicitada?",shape=diamond,fillcolor="#FFF2D8"];
+  start -> login -> profile -> activity;
+ }
+ subgraph cluster_dataset {
+  label="B. Preparación de datos (solo ingeniería)";style="rounded,filled";fillcolor="#F5FCF6";color="#BDDCCA";
+  data1 [label="Importar imágenes → Etiquetar BBox\nManual, escala de grises o YOLO previo"];
+  data2 [label="Corregir y guardar anotaciones JSON\nAumentar imágenes conservando BBox"];
+  data3 [label="Exportar dataset train/val/test\nEntrenar / evaluar YOLO y autorizar .pt"];
+  data1 -> data2 -> data3;
+ }
+ subgraph cluster_seq {
+  label="C. Configuración y ejecución ordenada de instrucciones";style="rounded,filled";fillcolor="#F6F9FE";color="#BFD3F0";
+  load [label="Leer work_sequence.json\nPasos y pausa del perfil (0–60 s)"];
+  validate [label="Validar pasos, modelo, parámetros\ny disponibilidad de cámaras"];
+  connect [label="¿La secuencia necesita\nESP32 para motor o LED?",shape=diamond,fillcolor="#FFF2D8"];
+  espcheck [label="Comprobar comunicación TCP\nIndicador rojo/verde"];
+  ok [label="¿Conexión válida?",shape=diamond,fillcolor="#FFF2D8"];
+  read [label="Obtener siguiente instrucción\nSeguir orden definido en editor",fillcolor="#D9EAFB"];
+  kind [label="¿Tipo?",shape=diamond,fillcolor="#FFF2D8"];
+  engine [label="MOTOR\nM1/M2, sentido, PWM, tiempo"];
+  drive [label="Enviar M_RUN vía TCP\nEsperar tiempo + margen; enviar MOTOR:0"];
+  lamp [label="LED\nEnviar RGB:r:g:b o RGB:0:0:0"];
+  joined [label="Instrucción terminada",fillcolor="#D9EAFB"];
+  more [label="¿Quedan instrucciones?",shape=diamond,fillcolor="#FFF2D8"];
+  wait [label="Esperar pausa configurada\nInterrumpible mediante Detener secuencia"];
+  load -> validate -> connect;
+  connect -> espcheck [xlabel="Sí"];
+  espcheck -> ok;
+  connect -> read [xlabel="No"];
+  ok -> read [xlabel="Sí"];
+  read -> kind;
+  kind -> engine [xlabel="Motor"];
+  engine -> drive -> joined;
+  kind -> lamp [xlabel="LED"];
+  lamp -> joined;
+  joined -> more;
+  more -> wait [xlabel="Sí"];
+  wait -> read [constraint=false];
+ }
+ subgraph cluster_camera {
+  label="D. Inspección mediante cámara y visión artificial";style="rounded,filled";fillcolor="#F4FAFD";color="#B6D7E9";
+  camera [label="CÁMARA\nSeleccionar webcam por nombre/índice\no usar una imagen de prueba"];
+  capture [label="Adquirir fotograma y esperar\nestabilización si está configurada"];
+  mode [label="¿Modo de cámara?",shape=diamond,fillcolor="#FFF2D8"];
+  manual [label="MANUAL: video + YOLO continuo\nMostrar BBox y conteo actualizado\nEsperar Confirmar y continuar"];
+  auto [label="AUTOMÁTICO: capturar foto\nsin intervención del operador"];
+  yolo [label="Inferencia final YOLO\nClases, confianza, BBox y conteo"];
+  aruco [label="¿ArUco habilitado?",shape=diamond,fillcolor="#FFF2D8"];
+  aruco_valid [label="Detectar IDs 0–3\n¿Calibración y homografía válidas?",shape=diamond,fillcolor="#FFF2D8"];
+  roi [label="Aplicar ROI y analizar contornos\nMedidas en mm y saturación (%)"];
+  optional [label="ArUco no válido (opcional)\nYOLO en foto completa; medidas N/D"];
+  mandatory [label="Si ArUco es obligatorio:\nBloquear inspección y detener",fillcolor="#FDE6DE",color="#D9A195"];
+  result [label="Mostrar resultados y métricas\nAmpliar detalles / Guardar distribución\nImagen sin etiquetas en mezclas",fillcolor="#D9EAFB"];
+  camera -> capture -> mode;
+  mode -> manual [xlabel="Manual"];
+  mode -> auto [xlabel="Auto"];
+  manual -> yolo;
+  auto -> yolo;
+  yolo -> aruco;
+  aruco -> result [xlabel="No"];
+  aruco -> aruco_valid [xlabel="Sí"];
+  aruco_valid -> roi [xlabel="Sí"];
+  roi -> result;
+  aruco_valid -> optional [xlabel="No, opcional"];
+  optional -> result;
+  aruco_valid -> mandatory [xlabel="No, obligatorio"];
+ }
+ subgraph cluster_fin {
+  label="E. Fin y seguridad";style="rounded,filled";fillcolor="#FDF9F7";color="#E3CECB";
+  finish [label="Finalizar secuencia o prueba\nMostrar resultado final",fillcolor="#E2F1E7"];
+  safe [label="En error/parada: intentar MOTOR:0\ny LED apagado; notificar el fallo",fillcolor="#FCE7E2"];
+  end [label="FIN",shape=oval,fillcolor="#D7EEDB"];
+  finish -> end;
+  safe -> end;
+ }
+
+ activity -> data1 [xlabel="Datos"];
+ activity -> load [xlabel="Secuencia"];
+ activity -> camera [xlabel="Prueba individual"];
+ data3 -> finish;
+ kind -> camera [xlabel="Cámara"];
+ result -> joined [constraint=false, xlabel="si es secuencia"];
+ result -> finish [constraint=false, xlabel="si es prueba individual"];
+ more -> finish [xlabel="No"];
+ ok -> safe [xlabel="No",constraint=false,color="#C87870"];
+ mandatory -> safe [constraint=false,color="#C87870"];
+}

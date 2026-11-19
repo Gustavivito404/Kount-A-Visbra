@@ -1,0 +1,66 @@
+digraph Visbra_UML_Clases {
+ graph [label="KOUNT-A / VISBRA — DIAGRAMA UML DE CLASES PRINCIPALES (v16)",
+  labelloc=t, fontname="DejaVu Sans",fontsize=23,fontcolor="#143C61",bgcolor=white,
+  rankdir=TB, splines=polyline, nodesep=.40,ranksep=.70,pad=.30,compound=false];
+ node [shape=record,style=filled,fillcolor="#F4FAFE",color="#9FBED4",penwidth=1.15,
+  fontname="DejaVu Sans",fontsize=11,fontcolor="#18364F",margin=".18,.10"];
+ edge [fontname="DejaVu Sans",fontsize=9.5,arrowsize=.76,color="#6685A1",penwidth=1.13];
+
+ subgraph cluster_gui {
+  label="Presentación / controlador de la HMI";fontname="DejaVu Sans";fontsize=16;
+  color="#C1D9EC";style="rounded,filled";fillcolor="#F1F8FF";
+  app [label="{KountApp\n(gui_app.py)|+ active_profile : dict\l+ current_objects : list\l- _camera_stream : LiveCamera\l+ sequence_steps : list\l+ message_queue : Queue\l|- _build_ui()\l- _start_test_count()\l- _render_editor()\l- _save_current()\l- _poll_queue()\l}",fillcolor="#D5E9FA",penwidth=2];
+  seq_ui [label="{SequenceUIMixin [mixin]\n(sequence_ui.py)|- _sequence_running : bool\l- _sequence_stop_event : Event\l|- _build_sequence_tab()\l- _seq_step_dialog()\l- _start_sequence()\l- _sequence_run_camera()\l- _stop_sequence()\l}"];
+  live_ui [label="{LiveUIMixin [mixin]\n(live_ui.py)|- _live_infer_thread : Thread\l- _live_generation : int\l|- _start_live_preview()\l- _start_live_inference()\l- _inspect_image()\l- _save_distribution()\l}"];
+ }
+
+ subgraph cluster_services {
+  label="Clases de servicio y persistencia";fontname="DejaVu Sans";fontsize=16;
+  color="#BFDAD2";style="rounded,filled";fillcolor="#F7FCFA";
+  users [label="{UserStore\n(auth_store.py)|+ path : Path\l|+ add_user()\l+ login()\l+ update_user()\l+ user_details()\l}",fillcolor="#EAF6EF"];
+  profiles [label="{ProfileManager\n(profile_store.py)|+ root : Path\l|+ set_root()\l+ create()\l+ load() / save()\l+ approve() / revoke()\l+ import_images()\l}",fillcolor="#EAF6EF"];
+  seq_store [label="{SequenceStore\n(sequence_core.py)|+ path : Path\l|+ load()\l+ load_delay()\l+ save(steps, delay)\l+ validate_delay()\l}",fillcolor="#EAF6EF"];
+  camera [label="{LiveCamera\n(live_camera.py)|+ index : int\l+ error : str\l- _frame : Image\l|+ start()\l+ latest() / wait_frame()\l+ stop()\l}",fillcolor="#EAF6EF"];
+  esp [label="{ESP32Link\n(esp32_link.py)|+ host : str\l+ port : int\l+ timeout : float\l|+ send(command)\l+ probe()\l+ motor() / rgb()\l+ stop()\l}",fillcolor="#EAF6EF"];
+ }
+
+ subgraph cluster_functional {
+  label="Módulos funcionales (no son clases)";fontname="DejaVu Sans";fontsize=16;
+  color="#D6D1DD";style="rounded,filled";fillcolor="#FCFAFE";
+  aruco [shape=box,style="rounded,filled",label="<<module>> aruco_core.py\nanalyze() / combine()\n4 ArUco, ROI, dimensiones, saturación",fillcolor="#F2ECF9"];
+  yolo [shape=box,style="rounded,filled",label="<<module>> yolo_core.py\ntrain_yolo() / predict_image()\nexport_yolo_dataset()",fillcolor="#F2ECF9"];
+  proj [shape=box,style="rounded,filled",label="<<module>> project_core.py\nread_annotations() / save_annotations()\ndetect_grayscale_boxes()",fillcolor="#F2ECF9"];
+  aug [shape=box,style="rounded,filled",label="<<module>> augment_core.py\ngenerate_augmentations()",fillcolor="#F2ECF9"];
+ }
+
+ subgraph cluster_io {
+  label="Archivos y dispositivos externos";fontname="DejaVu Sans";fontsize=16;
+  color="#E4D7C7";style="rounded,filled";fillcolor="#FFFCF8";
+  file_profiles [shape=folder,style=filled,label="profiles/<perfil>/\nconfig.json · work_sequence.json\ninput/ · output/ · anotaciones",fillcolor="#FFF1D9"];
+  file_users [shape=folder,style=filled,label="config/users.json\nconfig/appearance.json\nprofiles_location.json",fillcolor="#FFF1D9"];
+  webcam [shape=box3d,style=filled,label="Cámara(s) USB\nOpenCV",fillcolor="#FFF1D9"];
+  fw [shape=box3d,style=filled,label="ESP32 · firmware Arduino\nWi-Fi TCP :8080",fillcolor="#FFF1D9"];
+  drivers [shape=box3d,style=filled,label="BTS7960 M1/M2 + LED RGB",fillcolor="#FFF1D9"];
+ }
+
+ app -> seq_ui [arrowhead=empty,label="hereda"];
+ app -> live_ui [arrowhead=empty,label="hereda"];
+ app -> users [arrowhead=vee,label="usa"];
+ app -> profiles [arrowhead=vee,label="usa"];
+ app -> camera [arrowhead=diamond,label="mantiene"];
+ seq_ui -> seq_store [arrowhead=vee,label="pasos / pausa"];
+ seq_ui -> esp [arrowhead=vee,label="TCP"];
+ seq_ui -> camera [arrowhead=vee,label="captura"];
+ live_ui -> camera [arrowhead=vee,label="video"];
+ app -> proj [style=dashed,label="anotación"];
+ app -> aug [style=dashed,label="aumentación"];
+ app -> yolo [style=dashed,label="entrenamiento"];
+ live_ui -> yolo [style=dashed,label="inferencia"];
+ live_ui -> aruco [style=dashed,label="calibración"];
+ users -> file_users [arrowhead=vee,label="lee/escribe"];
+ profiles -> file_profiles [arrowhead=vee,label="perfil"];
+ seq_store -> file_profiles [arrowhead=vee,label="secuencia"];
+ camera -> webcam [arrowhead=vee,label="fotogramas"];
+ esp -> fw [arrowhead=vee,label="M_RUN / RGB / MOTOR:0"];
+ fw -> drivers [arrowhead=vee,label="PWM / GPIO"];
+}

@@ -1,30 +1,37 @@
-# Visbra / Kount-A — v3.16.4
+# Kount-A / Visbra
 
-**Reconstrucción documental de la entrega histórica de Visbra.**
+## Evolución del software para inspección y conteo por visión artificial
 
-- **Etiqueta técnica:** `v3.16.4`
-- **Etapa:** 3 de 3
-- **Versión original del proyecto:** 16
-- **Revisión documentada:** 4
-- **Cambio principal:** Ventana de resultados ampliados, pausa configurable y logotipo con mayor contraste.
-- **Procedencia:** `Avance cronologico.zip`
-- **Nota:** Estado final de v16 del archivo cronológico; verificado contra el último parche.
+Este repositorio documenta el desarrollo incremental de **Visbra**, software que integra adquisición, etiquetado, procesamiento visual, detección mediante YOLO, referencias ArUco, interfaz HMI y comunicación con el sistema embebido del prototipo **Kount-A**.
 
-La numeración de GitHub es una convención documental personalizada, **no implica compatibilidad con versionado semántico estándar**. Los commits y las etiquetas fueron reconstruidos a partir de archivos proporcionados y **no representan fechas originales de desarrollo**.
+### Tres grandes etapas
 
-## Ejecución
+1. **Desarrollo inicial:** base de aumento de datos, bounding boxes, parámetros por clase y entrenamiento de clasificación (v4–v10).
+2. **Detección y entrenamiento:** detector multiobjeto, herramientas de etiquetado y transición a YOLO (v11–v14).
+3. **Integración del sistema:** gestión de perfiles, ArUco, interfaces, cámara en vivo, comunicación ESP32 y secuencias (v15–v16).
 
-Consultar la documentación original (cuando está incluida) en `docs/README_ORIGINAL.md`. En general, desde la carpeta del proyecto:
+### Versiones
 
-```bash
-python -m pip install -r requirements.txt
-python -m src.gui_app
-```
+Las versiones se identifican con etiquetas del tipo `v1.4.0`, `v2.11.0` y `v3.16.4`. **El primer número indica la etapa**, el segundo corresponde al número original de Visbra y el tercero distingue una revisión puntual documentada. Esta convención es propia del proyecto, no SemVer estándar.
 
-**Excepción:** Las primeras entregas pueden requerir `python src/gui_app.py`, y los requisitos o carpetas pueden no encontrarse en exactamente el mismo estado. Consulta el README original.
+Los commits y las etiquetas se reconstruyeron a partir de entregas ZIP y no representan fechas originales de programación. No se dispone de un paquete v7 y la designación v4 para la carpeta inicial es provisional.
 
-## Antes de utilizarlo
+### Ejecutar la última entrega
 
-Los materiales personales del archivo histórico se excluyeron expresamente: usuarios, hashes de contraseñas, rutas locales, sesiones, datasets, imágenes de prueba, salidas y pesos de entrenamiento. Este código puede requerir volver a configurar el entorno, instalar dependencias y preparar un dataset propio para operar.
+Consulta su `README.md` y `requirements.txt` antes de instalar. Se requiere Python y las bibliotecas de visión/IA correspondientes; para actuadores, el firmware ESP32 debe estar instalado aparte. Los conjuntos de datos, los perfiles, los modelos y las configuraciones personales no se incluyen por privacidad y tamaño.
 
-La publicación pública del repositorio **no equivale a otorgar una licencia de reutilización**. El equipo deberá decidir una licencia cuando corresponda.
+### Publicación y autoría
+
+El proyecto pertenece a su equipo desarrollador. La publicación pública no concede por sí misma permiso de redistribución de código ajeno. No se ha definido una licencia en este paquete de preparación.
+
+
+### Documentación técnica
+
+- [Diagrama de flujo integral (PDF)](docs/diagramas/01_flujo_integral_KountA_v16.pdf)
+- [Diagrama UML de clases (PDF)](docs/diagramas/02_uml_clases_Visbra_v16.pdf)
+- [Versiones y trazabilidad](docs/historial/VERSIONES_Y_TRAZABILIDAD.md)
+- [Historial de cambios](docs/historial/CHANGELOG.md)
+- [Texto para capítulo 3 en LaTeX](docs/historial/TEXTO_TESINA_CAPITULO_3.tex)
+- [Auditoría de rutas y privacidad](docs/historial/AUDITORIA_RUTAS_Y_PRIVACIDAD.md)
+
+**Nota:** la rama `main` añade documentación después de la última etiqueta `v3.16.4`. Los 19 estados históricos permanecen inalterados en sus respectivas etiquetas.

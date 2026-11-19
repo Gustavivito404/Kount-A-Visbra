@@ -1,0 +1,1663 @@
+[
+  {
+    "tag": "v1.4.0",
+    "etapa": 1,
+    "visbra_original": 4,
+    "revision": 0,
+    "origen": "augment_gui_project",
+    "descripcion": "Primer entorno gráfico de aumento de imágenes y BBox sobre fondo claro.",
+    "observacion": "Entrega base sin numeración explícita: asignación v4 inferida por orden y funciones frente a v5.",
+    "cambios": {
+      "agregados": [
+        "README.txt",
+        "docs/ANTECEDENTE_PREVIO_A_LA_GUI.md",
+        "src/augment_core.py",
+        "src/bbox_utils.py",
+        "src/gui_app.py"
+      ],
+      "retirados": [],
+      "modificados": [],
+      "totales": {
+        "agregados": 5,
+        "retirados": 0,
+        "modificados": 0
+      }
+    },
+    "archivos_codigo": 5,
+    "manifest": [
+      {
+        "path": "README.txt",
+        "sha256": "81969978860408a2fbd2cf52ab0c6846e35cb2990f33d27efe5ca761af71f1f5",
+        "bytes": 795
+      },
+      {
+        "path": "docs/ANTECEDENTE_PREVIO_A_LA_GUI.md",
+        "sha256": "114010068b4fd9533af6393e4f85eaab9cd72e4d614a7b3b3f30aa6a5cce7887",
+        "bytes": 396
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "659cdb5333c8787c5b50f11c525d9c988ecdf705cdf317dda1049f30d245c75d",
+        "bytes": 8625
+      },
+      {
+        "path": "src/bbox_utils.py",
+        "sha256": "6e760ffddb5f8faaa664d3e1ecd8d2c558da20a58dba1001f0ab430c2003287e",
+        "bytes": 2310
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "9e32c9e7d6e784d0c54d16d07c5aa6a213242d467ecd64ec1e4d57345c5f5e45",
+        "bytes": 17386
+      }
+    ],
+    "publicado_sha256_zip": "7a80dfaa9204a5046b579fbc8b146b3e0fd6d0978f4c8b215486218129c75551",
+    "tamano_zip": 10183,
+    "git_commit_sha": "9b5ae471f16fd1b0462ff1bf6128bc344f823c81"
+  },
+  {
+    "tag": "v1.5.0",
+    "etapa": 1,
+    "visbra_original": 5,
+    "revision": 0,
+    "origen": "augment_gui_project_v5",
+    "descripcion": "Ventana de notas, recarga de vista previa y configuración de umbrales por clase.",
+    "observacion": "READMEs y código del directorio v5.",
+    "cambios": {
+      "agregados": [
+        "requirements.txt"
+      ],
+      "retirados": [
+        "docs/ANTECEDENTE_PREVIO_A_LA_GUI.md"
+      ],
+      "modificados": [
+        "README.txt",
+        "src/augment_core.py",
+        "src/bbox_utils.py",
+        "src/gui_app.py"
+      ],
+      "totales": {
+        "agregados": 1,
+        "retirados": 1,
+        "modificados": 4
+      }
+    },
+    "archivos_codigo": 5,
+    "manifest": [
+      {
+        "path": "README.txt",
+        "sha256": "5ddffa896ab89deac7a3165145aa4c82fd2b83d1de5e77c46f26c9e9f1b40a5a",
+        "bytes": 551
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "f122812f495e257a0ea2916d355afdc346254347bcffba116b33043484ecf9f8",
+        "bytes": 36
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "81c0a6072c5f19df4db73709017c55e566a94748b58df07b2162322f542242ca",
+        "bytes": 10629
+      },
+      {
+        "path": "src/bbox_utils.py",
+        "sha256": "86544ed99bd93eaacdb97ce2d80b44b3d57b935a71d61ca6ba02ce90b14c82cd",
+        "bytes": 2496
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "607cc26844525dfa89b8fd30e9e99ccf8d670fd1757f173a9e5465e7f092f5b5",
+        "bytes": 27368
+      }
+    ],
+    "publicado_sha256_zip": "8ad895c5226ef48dfdf3fa71cf9fe6ac90df1073d12364885b397be6b76861c2",
+    "tamano_zip": 12267,
+    "git_commit_sha": "093c7bc59addad0bc08b7f2406993e1d80912f4b"
+  },
+  {
+    "tag": "v1.6.0",
+    "etapa": 1,
+    "visbra_original": 6,
+    "revision": 0,
+    "origen": "augment_gui_project_v6",
+    "descripcion": "Configuración de umbrales por clase integrada en el panel izquierdo.",
+    "observacion": "README y código del directorio v6.",
+    "cambios": {
+      "agregados": [],
+      "retirados": [],
+      "modificados": [
+        "README.txt",
+        "src/gui_app.py"
+      ],
+      "totales": {
+        "agregados": 0,
+        "retirados": 0,
+        "modificados": 2
+      }
+    },
+    "archivos_codigo": 5,
+    "manifest": [
+      {
+        "path": "README.txt",
+        "sha256": "543396313bf3e55c0212e85bcf1916c3bb2ea0c9e3b0e5ab7a798e9310987bda",
+        "bytes": 645
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "f122812f495e257a0ea2916d355afdc346254347bcffba116b33043484ecf9f8",
+        "bytes": 36
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "81c0a6072c5f19df4db73709017c55e566a94748b58df07b2162322f542242ca",
+        "bytes": 10629
+      },
+      {
+        "path": "src/bbox_utils.py",
+        "sha256": "86544ed99bd93eaacdb97ce2d80b44b3d57b935a71d61ca6ba02ce90b14c82cd",
+        "bytes": 2496
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "7fd8485eb5ba81d8726d8bda8d5c7f3f53550528cf10dd67642932a9ad360401",
+        "bytes": 27420
+      }
+    ],
+    "publicado_sha256_zip": "4b97e3ed7ef807d3a3cfe2eeb02522abbc1b7dcab0d161fde8169675f9a783d8",
+    "tamano_zip": 12437,
+    "git_commit_sha": "ec095fd20c46b2c60f4b3917c0d005423fa5eb4a"
+  },
+  {
+    "tag": "v1.8.0",
+    "etapa": 1,
+    "visbra_original": 8,
+    "revision": 0,
+    "origen": "augment_gui_project_v8",
+    "descripcion": "Persistencia automática de umbrales y corrección del cambio de clase.",
+    "observacion": "No se recibió v7 como carpeta independiente.",
+    "cambios": {
+      "agregados": [],
+      "retirados": [],
+      "modificados": [
+        "README.txt",
+        "src/augment_core.py",
+        "src/gui_app.py"
+      ],
+      "totales": {
+        "agregados": 0,
+        "retirados": 0,
+        "modificados": 3
+      }
+    },
+    "archivos_codigo": 5,
+    "manifest": [
+      {
+        "path": "README.txt",
+        "sha256": "36f263e8d8c7150361445741be9609d17c41f1ff47097faf6f0b2a0cc29f0278",
+        "bytes": 482
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "f122812f495e257a0ea2916d355afdc346254347bcffba116b33043484ecf9f8",
+        "bytes": 36
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "85670648a47f9c5f3b31c527df9d1cb27133d7bffbe46de18dae57c7edf2f9e7",
+        "bytes": 12033
+      },
+      {
+        "path": "src/bbox_utils.py",
+        "sha256": "86544ed99bd93eaacdb97ce2d80b44b3d57b935a71d61ca6ba02ce90b14c82cd",
+        "bytes": 2496
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "7bde9515a1c3d7e249dac2c3a1da77aa959909dc6e2a661c2ba6b744c1b9061e",
+        "bytes": 30903
+      }
+    ],
+    "publicado_sha256_zip": "a1d0d7128d7c9e5398352e3dc8f092022d10bd17d190b1f58f8c0dd2e4627b14",
+    "tamano_zip": 13208,
+    "git_commit_sha": "43152230f56800543a715fa6f3308cfb9e1e2748"
+  },
+  {
+    "tag": "v1.9.0",
+    "etapa": 1,
+    "visbra_original": 9,
+    "revision": 0,
+    "origen": "augment_gui_project_v9",
+    "descripcion": "Guardado de última sesión y recuperación de carpetas de entrada/salida.",
+    "observacion": "README del directorio v9.",
+    "cambios": {
+      "agregados": [],
+      "retirados": [],
+      "modificados": [
+        "README.txt",
+        "src/gui_app.py"
+      ],
+      "totales": {
+        "agregados": 0,
+        "retirados": 0,
+        "modificados": 2
+      }
+    },
+    "archivos_codigo": 5,
+    "manifest": [
+      {
+        "path": "README.txt",
+        "sha256": "3e613dc430540fc1147c42a922f7190de6d29b00fdbbb3309d8029213a8d32ac",
+        "bytes": 529
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "f122812f495e257a0ea2916d355afdc346254347bcffba116b33043484ecf9f8",
+        "bytes": 36
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "85670648a47f9c5f3b31c527df9d1cb27133d7bffbe46de18dae57c7edf2f9e7",
+        "bytes": 12033
+      },
+      {
+        "path": "src/bbox_utils.py",
+        "sha256": "86544ed99bd93eaacdb97ce2d80b44b3d57b935a71d61ca6ba02ce90b14c82cd",
+        "bytes": 2496
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "d7d6534ac384dd2c8bc0daa2c6df03d017fbf195467974d77dbeed314449d462",
+        "bytes": 33638
+      }
+    ],
+    "publicado_sha256_zip": "a70fe65b85c43a3e9fb1dce0a99dafea8a9ed7abf15aedcabbc9242946286fe9",
+    "tamano_zip": 13792,
+    "git_commit_sha": "949a31e4defe1639d90da52ffce1991a37668560"
+  },
+  {
+    "tag": "v1.10.0",
+    "etapa": 1,
+    "visbra_original": 10,
+    "revision": 0,
+    "origen": "augment_gui_project_v10",
+    "descripcion": "Se incorpora entrenamiento y prueba de una CNN para clasificación de imagen completa.",
+    "observacion": "El peso entrenado .pth se excluye del paquete público.",
+    "cambios": {
+      "agregados": [
+        "README.md",
+        "src/__init__.py",
+        "src/classifier_core.py"
+      ],
+      "retirados": [
+        "README.txt"
+      ],
+      "modificados": [
+        "requirements.txt",
+        "src/augment_core.py",
+        "src/gui_app.py"
+      ],
+      "totales": {
+        "agregados": 3,
+        "retirados": 1,
+        "modificados": 3
+      }
+    },
+    "archivos_codigo": 7,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "6fb153cfe55c997ce148e07c25ac35b527fe7ef6dc3da135c01c2132f8133bf6",
+        "bytes": 1450
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "fae7ab55f3b93f6c7672ab59d07f0e0c9023bd0dcfcaa914097c09a01664d236",
+        "bytes": 36
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "efc1ff4db63aee547d6332d369e05ce70828e8f4a580ed3612c45d5453c8ac54",
+        "bytes": 49
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "03a4f77c6eb9d33d36128791361ea14d04997c7b0056aa08024cbfb6c25b44ae",
+        "bytes": 12139
+      },
+      {
+        "path": "src/bbox_utils.py",
+        "sha256": "86544ed99bd93eaacdb97ce2d80b44b3d57b935a71d61ca6ba02ce90b14c82cd",
+        "bytes": 2496
+      },
+      {
+        "path": "src/classifier_core.py",
+        "sha256": "f807ed7b004be2f7f8e893fd62d3b2abe2cbbb0f5cf54c3e99215649fa0f82cc",
+        "bytes": 16163
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "ae151336b91dff6f0fda41905a816a3bd2e652220dd37150031555a8360992b4",
+        "bytes": 53611
+      }
+    ],
+    "publicado_sha256_zip": "4c8e438310f5430bec4280ff0b2b668b4783014718e5cb1f9d872aca14b498da",
+    "tamano_zip": 22546,
+    "git_commit_sha": "6ee37da39e667dbe055e869b9803bc6c46172166"
+  },
+  {
+    "tag": "v2.11.0",
+    "etapa": 2,
+    "visbra_original": 11,
+    "revision": 0,
+    "origen": "augment_gui_project_v11",
+    "descripcion": "Se incorpora detección de múltiples objetos y pruebas con monedas.",
+    "observacion": "Detección basada en código detection_core.py y README v11.",
+    "cambios": {
+      "agregados": [
+        "src/detection_core.py"
+      ],
+      "retirados": [],
+      "modificados": [
+        "README.md",
+        "requirements.txt",
+        "src/__init__.py",
+        "src/gui_app.py"
+      ],
+      "totales": {
+        "agregados": 1,
+        "retirados": 0,
+        "modificados": 4
+      }
+    },
+    "archivos_codigo": 8,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "409dd3f833c822d6d192f1e393ed0a306820a5793dd04b7182f3bf55dbb9b10b",
+        "bytes": 2235
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "f54810fbf046c9ebdd972a6212f4639cb68daa45000ec94013c2b098ce24c6a6",
+        "bytes": 50
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "eed5814116ffbf09e692b5efa00631d34de38ca4c852b4b559d97de79cbb821c",
+        "bytes": 49
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "03a4f77c6eb9d33d36128791361ea14d04997c7b0056aa08024cbfb6c25b44ae",
+        "bytes": 12139
+      },
+      {
+        "path": "src/bbox_utils.py",
+        "sha256": "86544ed99bd93eaacdb97ce2d80b44b3d57b935a71d61ca6ba02ce90b14c82cd",
+        "bytes": 2496
+      },
+      {
+        "path": "src/classifier_core.py",
+        "sha256": "f807ed7b004be2f7f8e893fd62d3b2abe2cbbb0f5cf54c3e99215649fa0f82cc",
+        "bytes": 16163
+      },
+      {
+        "path": "src/detection_core.py",
+        "sha256": "990401a88ee8e4fd9b920a2b2aa35aba9790a62b858ce6967cfc4cbf3fb6da76",
+        "bytes": 24078
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "26719f22db75b2dece97d446e0ed5974267886342e8ba5b5da9ebb97c7fb4de9",
+        "bytes": 83492
+      }
+    ],
+    "publicado_sha256_zip": "399abb153c00b6567a2650197f459bae19e49dc6c38387a58ca3711d9226e4e8",
+    "tamano_zip": 33312,
+    "git_commit_sha": "12f602d8cfe1371b0fb757503d5c872c5625f1cc"
+  },
+  {
+    "tag": "v2.12.0",
+    "etapa": 2,
+    "visbra_original": 12,
+    "revision": 0,
+    "origen": "augment_gui_project_v12",
+    "descripcion": "Se separan entrenamiento del detector y pruebas de conteo; se añaden umbrales por RGB.",
+    "observacion": "README v12 y código.",
+    "cambios": {
+      "agregados": [],
+      "retirados": [
+        "src/classifier_core.py"
+      ],
+      "modificados": [
+        "README.md",
+        "src/augment_core.py",
+        "src/bbox_utils.py",
+        "src/gui_app.py"
+      ],
+      "totales": {
+        "agregados": 0,
+        "retirados": 1,
+        "modificados": 4
+      }
+    },
+    "archivos_codigo": 7,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "af687eaaab7c6fc6a4b9d297fc4b4ee5a4a1f1340d3ed1455ebfa71a07871570",
+        "bytes": 2096
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "f54810fbf046c9ebdd972a6212f4639cb68daa45000ec94013c2b098ce24c6a6",
+        "bytes": 50
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "eed5814116ffbf09e692b5efa00631d34de38ca4c852b4b559d97de79cbb821c",
+        "bytes": 49
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "84134f9075b2c9dbc7ba5c0f15d89275882fa2c0d39c5e3712ea426f960c5733",
+        "bytes": 12966
+      },
+      {
+        "path": "src/bbox_utils.py",
+        "sha256": "a26932fde837b1faf571367f0b7b5f442065de688170fafc3fb8457994eb9a41",
+        "bytes": 4381
+      },
+      {
+        "path": "src/detection_core.py",
+        "sha256": "990401a88ee8e4fd9b920a2b2aa35aba9790a62b858ce6967cfc4cbf3fb6da76",
+        "bytes": 24078
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "77188d734ceb6b03d83a15a459f86c859f08de8dfaa3c4161089b30a529a73ea",
+        "bytes": 67876
+      }
+    ],
+    "publicado_sha256_zip": "3fdcf57e46e73c59ab176d96224195d13c2a6b74a51bacd129aa82483849a5c8",
+    "tamano_zip": 27684,
+    "git_commit_sha": "2ac1f00c9a1e2af3d96834cf994b311c805c92ee"
+  },
+  {
+    "tag": "v2.13.0",
+    "etapa": 2,
+    "visbra_original": 13,
+    "revision": 0,
+    "origen": "augment_gui_project_v13",
+    "descripcion": "Se amplían ajustes de aumento de datos: iluminación, color y ruido visual.",
+    "observacion": "README_CAMBIOS.md; el README principal conserva título v12.",
+    "cambios": {
+      "agregados": [
+        "src/README_CAMBIOS.md"
+      ],
+      "retirados": [],
+      "modificados": [
+        "src/augment_core.py",
+        "src/detection_core.py",
+        "src/gui_app.py"
+      ],
+      "totales": {
+        "agregados": 1,
+        "retirados": 0,
+        "modificados": 3
+      }
+    },
+    "archivos_codigo": 8,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "af687eaaab7c6fc6a4b9d297fc4b4ee5a4a1f1340d3ed1455ebfa71a07871570",
+        "bytes": 2096
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "f54810fbf046c9ebdd972a6212f4639cb68daa45000ec94013c2b098ce24c6a6",
+        "bytes": 50
+      },
+      {
+        "path": "src/README_CAMBIOS.md",
+        "sha256": "b37ff28d79261d165b3c656e6845475937cd4da78d1cc4cd328bccc5dbf042f9",
+        "bytes": 881
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "eed5814116ffbf09e692b5efa00631d34de38ca4c852b4b559d97de79cbb821c",
+        "bytes": 49
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "457699f956db2ceace948030e20357145e06afb720353be2eaeef32da6f31f95",
+        "bytes": 16229
+      },
+      {
+        "path": "src/bbox_utils.py",
+        "sha256": "a26932fde837b1faf571367f0b7b5f442065de688170fafc3fb8457994eb9a41",
+        "bytes": 4381
+      },
+      {
+        "path": "src/detection_core.py",
+        "sha256": "cf2f7d5ff29d836226153852fb492ce568c5fd1901c98fd9eb84ba9b2b345ec6",
+        "bytes": 25152
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "dadbf5ad9f5fce49241b4f04613361638a35177748196145657bc73e2befbcfd",
+        "bytes": 75036
+      }
+    ],
+    "publicado_sha256_zip": "8d5f167e37a01bb73422f5877d4947bb9e6e2b6d8a605f9e3d30701e58304cbb",
+    "tamano_zip": 30575,
+    "git_commit_sha": "fd1da00058021576164e333f6e21c518aa1f7c46"
+  },
+  {
+    "tag": "v2.14.0",
+    "etapa": 2,
+    "visbra_original": 14,
+    "revision": 0,
+    "origen": "KountA_YOLO_v14",
+    "descripcion": "Transición al flujo YOLO, etiquetado multiobjeto y administración de BBox.",
+    "observacion": "Los pesos preentrenados y entrenados se excluyen.",
+    "cambios": {
+      "agregados": [
+        "src/camera_utils.py",
+        "src/project_core.py",
+        "src/smoke_test.py",
+        "src/yolo_core.py"
+      ],
+      "retirados": [
+        "src/README_CAMBIOS.md",
+        "src/bbox_utils.py",
+        "src/detection_core.py"
+      ],
+      "modificados": [
+        "README.md",
+        "requirements.txt",
+        "src/__init__.py",
+        "src/augment_core.py",
+        "src/gui_app.py"
+      ],
+      "totales": {
+        "agregados": 4,
+        "retirados": 3,
+        "modificados": 5
+      }
+    },
+    "archivos_codigo": 9,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "da2a88541f903a383c05456b330fd93d9ae2a8713a3e01c8d342d230e1b34a6f",
+        "bytes": 7662
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "763bb46b424dcd1b9f879c981059ec53a6e7add39ae3b7007c141d684e61c31f",
+        "bytes": 98
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "d23a40f6782a180d404c31c652dc732998738c616d7ba97b2de79afff45b3630",
+        "bytes": 63
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "69efe5ac2405dcfc3d41172fb1ebad5a7a823fceee6343adedf0aa3d1b95c8d4",
+        "bytes": 6930
+      },
+      {
+        "path": "src/camera_utils.py",
+        "sha256": "5acc286a0d8b176c9c0a52a16b5c59f511d8fcebdd3ba9b1c4c0c81daee14c81",
+        "bytes": 1606
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "6745f3afce8af58a926638d95a4f4ea73cc37c00aa18ab4926c154bd30507037",
+        "bytes": 57148
+      },
+      {
+        "path": "src/project_core.py",
+        "sha256": "3fd35d1b6423f68fb7544ce65b13c6cdb64259e0a84312f001e254c8bb998123",
+        "bytes": 8739
+      },
+      {
+        "path": "src/smoke_test.py",
+        "sha256": "5cad69b1fc4d7687672f23421c0526668cc1541dcf6b97f589be203ad493afa1",
+        "bytes": 2730
+      },
+      {
+        "path": "src/yolo_core.py",
+        "sha256": "4495a3e6dfea52e084a105961b81e089c4d47521e6303012be05b64a04cde971",
+        "bytes": 15279
+      }
+    ],
+    "publicado_sha256_zip": "e5a4caf4dd48adca2e77125cdfc1387aad6d4c53254fccc425fb5b2b6acc6cd3",
+    "tamano_zip": 31554,
+    "git_commit_sha": "892569c9eee0253365b054a7ec75b18ce6d3d7c1"
+  },
+  {
+    "tag": "v3.15.0",
+    "etapa": 3,
+    "visbra_original": 15,
+    "revision": 0,
+    "origen": "KountA_YOLO_v15.zip",
+    "descripcion": "Se incorporan perfiles, roles, HMI ampliada y medición mediante ArUco.",
+    "observacion": "Primera entrega v15 verificable, recuperada del ZIP previo.",
+    "cambios": {
+      "agregados": [
+        "assets/kounta_logo.png",
+        "src/aruco_core.py",
+        "src/auth_store.py",
+        "src/profile_store.py"
+      ],
+      "retirados": [],
+      "modificados": [
+        "README.md",
+        "requirements.txt",
+        "src/__init__.py",
+        "src/camera_utils.py",
+        "src/gui_app.py",
+        "src/project_core.py"
+      ],
+      "totales": {
+        "agregados": 4,
+        "retirados": 0,
+        "modificados": 6
+      }
+    },
+    "archivos_codigo": 13,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "bdc7d37e2e86c355ea4529c69bcf0d3bb3f0fac7019c1f8aaf7bd1190005ac5a",
+        "bytes": 7682
+      },
+      {
+        "path": "assets/kounta_logo.png",
+        "sha256": "f45eb652fe3f9860372b34d6c2b0fe7e01fb0c3b853f82815b7f9021836584dd",
+        "bytes": 10454
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "7679879332e3c2ea4a0e73629fe1c0b228341d6f1e71b23aa9a7539ca9dde0b5",
+        "bytes": 106
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "578bd9b2eca013377c88be8665d084a805634e46613a5e1e129cf3bebbbe2499",
+        "bytes": 78
+      },
+      {
+        "path": "src/aruco_core.py",
+        "sha256": "c1c0dd2608a2fe5e614b4a46107eaa6a3d526c8ccec57e2adc263eac423ad6e4",
+        "bytes": 8563
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "69efe5ac2405dcfc3d41172fb1ebad5a7a823fceee6343adedf0aa3d1b95c8d4",
+        "bytes": 6930
+      },
+      {
+        "path": "src/auth_store.py",
+        "sha256": "fd5f96e8880c06a4615f03ba0b1634463a1c419e1cccbe13abcf73bc4b100ac1",
+        "bytes": 2567
+      },
+      {
+        "path": "src/camera_utils.py",
+        "sha256": "7ad051d0a63db05a333eff40c5cf4647cc00e491e243f2000aeb148f630bc6e8",
+        "bytes": 1839
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "2f80e640a7d20979425ff5d791fac975e8ad58046ac2720063f188e08262d978",
+        "bytes": 94387
+      },
+      {
+        "path": "src/profile_store.py",
+        "sha256": "d58a0eeec5b7b84a2701b17037ad041e29bb47a055b170f93f55bc82fc1cc856",
+        "bytes": 8556
+      },
+      {
+        "path": "src/project_core.py",
+        "sha256": "f5f527d5bbf5417ebee635ad17cdd804432ffb0445bd67a9824b312ec02482e1",
+        "bytes": 9060
+      },
+      {
+        "path": "src/smoke_test.py",
+        "sha256": "5cad69b1fc4d7687672f23421c0526668cc1541dcf6b97f589be203ad493afa1",
+        "bytes": 2730
+      },
+      {
+        "path": "src/yolo_core.py",
+        "sha256": "4495a3e6dfea52e084a105961b81e089c4d47521e6303012be05b64a04cde971",
+        "bytes": 15279
+      }
+    ],
+    "publicado_sha256_zip": "19ad6a3880fef39d16495eb27ff5d3a384edecd7aa2cc11324d8b8a03e6f09de",
+    "tamano_zip": 57525,
+    "git_commit_sha": "edf9238ddd0241dc0d4a0d0d61e2874e55937baa"
+  },
+  {
+    "tag": "v3.15.1",
+    "etapa": 3,
+    "visbra_original": 15,
+    "revision": 1,
+    "origen": "KountA_v15_ajustada_completa.zip",
+    "descripcion": "Ajustes de integración de perfiles, roles y control de vistas.",
+    "observacion": "Se conserva íntegro el código de la entrega intermedia.",
+    "cambios": {
+      "agregados": [],
+      "retirados": [],
+      "modificados": [
+        "README.md",
+        "src/auth_store.py",
+        "src/gui_app.py",
+        "src/profile_store.py",
+        "src/yolo_core.py"
+      ],
+      "totales": {
+        "agregados": 0,
+        "retirados": 0,
+        "modificados": 5
+      }
+    },
+    "archivos_codigo": 13,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "e60de0df7e79e46928da17ae0bb777742b1d429a2cdad5333777e29a12cb6149",
+        "bytes": 10526
+      },
+      {
+        "path": "assets/kounta_logo.png",
+        "sha256": "f45eb652fe3f9860372b34d6c2b0fe7e01fb0c3b853f82815b7f9021836584dd",
+        "bytes": 10454
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "7679879332e3c2ea4a0e73629fe1c0b228341d6f1e71b23aa9a7539ca9dde0b5",
+        "bytes": 106
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "578bd9b2eca013377c88be8665d084a805634e46613a5e1e129cf3bebbbe2499",
+        "bytes": 78
+      },
+      {
+        "path": "src/aruco_core.py",
+        "sha256": "c1c0dd2608a2fe5e614b4a46107eaa6a3d526c8ccec57e2adc263eac423ad6e4",
+        "bytes": 8563
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "69efe5ac2405dcfc3d41172fb1ebad5a7a823fceee6343adedf0aa3d1b95c8d4",
+        "bytes": 6930
+      },
+      {
+        "path": "src/auth_store.py",
+        "sha256": "9819c9a18b8dd9818e279e49eb4f174baeeb162b20a860a230c82c3d83bb4d63",
+        "bytes": 5437
+      },
+      {
+        "path": "src/camera_utils.py",
+        "sha256": "7ad051d0a63db05a333eff40c5cf4647cc00e491e243f2000aeb148f630bc6e8",
+        "bytes": 1839
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "aa82c3f3a88df519e36884e55b88cf89630cc7d3dab0fc0186ab321d8a331165",
+        "bytes": 110371
+      },
+      {
+        "path": "src/profile_store.py",
+        "sha256": "5ae5d644b214a87fab378f9960c5409f15e5e6cefc393abc698bdabbd4a4e7f4",
+        "bytes": 9229
+      },
+      {
+        "path": "src/project_core.py",
+        "sha256": "f5f527d5bbf5417ebee635ad17cdd804432ffb0445bd67a9824b312ec02482e1",
+        "bytes": 9060
+      },
+      {
+        "path": "src/smoke_test.py",
+        "sha256": "5cad69b1fc4d7687672f23421c0526668cc1541dcf6b97f589be203ad493afa1",
+        "bytes": 2730
+      },
+      {
+        "path": "src/yolo_core.py",
+        "sha256": "6a313ae6540646231bed92b1f43a88af131cd2296f3853896c2647352bc95718",
+        "bytes": 17995
+      }
+    ],
+    "publicado_sha256_zip": "b954c2c3aa6e38ab4129f3c19ae9d86fdfd757c89ec4a33edf9c8dec5fd6bd4f",
+    "tamano_zip": 63095,
+    "git_commit_sha": "61f4a77f6d50853fdf90f540108e4db5a5558e41"
+  },
+  {
+    "tag": "v3.15.2",
+    "etapa": 3,
+    "visbra_original": 15,
+    "revision": 2,
+    "origen": "KountA_v15_completa_ajuste_menus.zip",
+    "descripcion": "Ajustes de menús desplegables y organización de la interfaz.",
+    "observacion": "ZIP de actualización intermedia con nota de cambio.",
+    "cambios": {
+      "agregados": [],
+      "retirados": [],
+      "modificados": [
+        "src/gui_app.py"
+      ],
+      "totales": {
+        "agregados": 0,
+        "retirados": 0,
+        "modificados": 1
+      }
+    },
+    "archivos_codigo": 13,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "e60de0df7e79e46928da17ae0bb777742b1d429a2cdad5333777e29a12cb6149",
+        "bytes": 10526
+      },
+      {
+        "path": "assets/kounta_logo.png",
+        "sha256": "f45eb652fe3f9860372b34d6c2b0fe7e01fb0c3b853f82815b7f9021836584dd",
+        "bytes": 10454
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "7679879332e3c2ea4a0e73629fe1c0b228341d6f1e71b23aa9a7539ca9dde0b5",
+        "bytes": 106
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "578bd9b2eca013377c88be8665d084a805634e46613a5e1e129cf3bebbbe2499",
+        "bytes": 78
+      },
+      {
+        "path": "src/aruco_core.py",
+        "sha256": "c1c0dd2608a2fe5e614b4a46107eaa6a3d526c8ccec57e2adc263eac423ad6e4",
+        "bytes": 8563
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "69efe5ac2405dcfc3d41172fb1ebad5a7a823fceee6343adedf0aa3d1b95c8d4",
+        "bytes": 6930
+      },
+      {
+        "path": "src/auth_store.py",
+        "sha256": "9819c9a18b8dd9818e279e49eb4f174baeeb162b20a860a230c82c3d83bb4d63",
+        "bytes": 5437
+      },
+      {
+        "path": "src/camera_utils.py",
+        "sha256": "7ad051d0a63db05a333eff40c5cf4647cc00e491e243f2000aeb148f630bc6e8",
+        "bytes": 1839
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "c1794cfedff3bd9a455ed1cb3088e11ab9807b67d977cc137da987b383467245",
+        "bytes": 112835
+      },
+      {
+        "path": "src/profile_store.py",
+        "sha256": "5ae5d644b214a87fab378f9960c5409f15e5e6cefc393abc698bdabbd4a4e7f4",
+        "bytes": 9229
+      },
+      {
+        "path": "src/project_core.py",
+        "sha256": "f5f527d5bbf5417ebee635ad17cdd804432ffb0445bd67a9824b312ec02482e1",
+        "bytes": 9060
+      },
+      {
+        "path": "src/smoke_test.py",
+        "sha256": "5cad69b1fc4d7687672f23421c0526668cc1541dcf6b97f589be203ad493afa1",
+        "bytes": 2730
+      },
+      {
+        "path": "src/yolo_core.py",
+        "sha256": "6a313ae6540646231bed92b1f43a88af131cd2296f3853896c2647352bc95718",
+        "bytes": 17995
+      }
+    ],
+    "publicado_sha256_zip": "90a1ef1ae64b9eb08038b006b2f9460e02e4709a5967d0bb333f410ee3be11ec",
+    "tamano_zip": 63810,
+    "git_commit_sha": "d7c0dae79897236e2651f0e13291a7e9b1b67b0b"
+  },
+  {
+    "tag": "v3.15.3",
+    "etapa": 3,
+    "visbra_original": 15,
+    "revision": 3,
+    "origen": "Avance cronologico.zip::KountA_YOLO_v15",
+    "descripcion": "Refinamientos de v15, incluida visibilidad de BBox y actualización del panel de prueba.",
+    "observacion": "Código final v15 del archivo cronológico; mismos bytes que v15(1).zip.",
+    "cambios": {
+      "agregados": [],
+      "retirados": [],
+      "modificados": [
+        "README.md",
+        "src/gui_app.py"
+      ],
+      "totales": {
+        "agregados": 0,
+        "retirados": 0,
+        "modificados": 2
+      }
+    },
+    "archivos_codigo": 13,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "bdc7d37e2e86c355ea4529c69bcf0d3bb3f0fac7019c1f8aaf7bd1190005ac5a",
+        "bytes": 7682
+      },
+      {
+        "path": "assets/kounta_logo.png",
+        "sha256": "f45eb652fe3f9860372b34d6c2b0fe7e01fb0c3b853f82815b7f9021836584dd",
+        "bytes": 10454
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "7679879332e3c2ea4a0e73629fe1c0b228341d6f1e71b23aa9a7539ca9dde0b5",
+        "bytes": 106
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "578bd9b2eca013377c88be8665d084a805634e46613a5e1e129cf3bebbbe2499",
+        "bytes": 78
+      },
+      {
+        "path": "src/aruco_core.py",
+        "sha256": "c1c0dd2608a2fe5e614b4a46107eaa6a3d526c8ccec57e2adc263eac423ad6e4",
+        "bytes": 8563
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "69efe5ac2405dcfc3d41172fb1ebad5a7a823fceee6343adedf0aa3d1b95c8d4",
+        "bytes": 6930
+      },
+      {
+        "path": "src/auth_store.py",
+        "sha256": "9819c9a18b8dd9818e279e49eb4f174baeeb162b20a860a230c82c3d83bb4d63",
+        "bytes": 5437
+      },
+      {
+        "path": "src/camera_utils.py",
+        "sha256": "7ad051d0a63db05a333eff40c5cf4647cc00e491e243f2000aeb148f630bc6e8",
+        "bytes": 1839
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "c583d6765989d205c7865b335d8a593ed1956bcddba1dad7e992de8bd9c2c261",
+        "bytes": 120786
+      },
+      {
+        "path": "src/profile_store.py",
+        "sha256": "5ae5d644b214a87fab378f9960c5409f15e5e6cefc393abc698bdabbd4a4e7f4",
+        "bytes": 9229
+      },
+      {
+        "path": "src/project_core.py",
+        "sha256": "f5f527d5bbf5417ebee635ad17cdd804432ffb0445bd67a9824b312ec02482e1",
+        "bytes": 9060
+      },
+      {
+        "path": "src/smoke_test.py",
+        "sha256": "5cad69b1fc4d7687672f23421c0526668cc1541dcf6b97f589be203ad493afa1",
+        "bytes": 2730
+      },
+      {
+        "path": "src/yolo_core.py",
+        "sha256": "6a313ae6540646231bed92b1f43a88af131cd2296f3853896c2647352bc95718",
+        "bytes": 17995
+      }
+    ],
+    "publicado_sha256_zip": "d5dd1e974f4ef3573bdcc42075afa5e9841c768a6d46370db2ae8ce83225e3bd",
+    "tamano_zip": 64901,
+    "git_commit_sha": "84f420dfa9f86add080f24a8e145679c74debf8a"
+  },
+  {
+    "tag": "v3.16.0",
+    "etapa": 3,
+    "visbra_original": 16,
+    "revision": 0,
+    "origen": "KountA_YOLO_v16.zip",
+    "descripcion": "Primer sistema v16: cámara en vivo, secuencias programables y comunicación ESP32.",
+    "observacion": "ZIP de entrega inicial de v16.",
+    "cambios": {
+      "agregados": [
+        "src/esp32_link.py",
+        "src/live_camera.py",
+        "src/live_ui.py",
+        "src/sequence_core.py",
+        "src/sequence_ui.py",
+        "src/smoke_v16.py"
+      ],
+      "retirados": [],
+      "modificados": [
+        "README.md",
+        "requirements.txt",
+        "src/camera_utils.py",
+        "src/gui_app.py"
+      ],
+      "totales": {
+        "agregados": 6,
+        "retirados": 0,
+        "modificados": 4
+      }
+    },
+    "archivos_codigo": 19,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "3b8e7fb8aa8ceee83374bea2f31e3e06291e6b0be73bca33c5b59776a37484ab",
+        "bytes": 9369
+      },
+      {
+        "path": "assets/kounta_logo.png",
+        "sha256": "f45eb652fe3f9860372b34d6c2b0fe7e01fb0c3b853f82815b7f9021836584dd",
+        "bytes": 10454
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "2280cec549db1cffe7b15e0a6c187e566f889b1c81d26bc2450bfc54822095b6",
+        "bytes": 225
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "578bd9b2eca013377c88be8665d084a805634e46613a5e1e129cf3bebbbe2499",
+        "bytes": 78
+      },
+      {
+        "path": "src/aruco_core.py",
+        "sha256": "c1c0dd2608a2fe5e614b4a46107eaa6a3d526c8ccec57e2adc263eac423ad6e4",
+        "bytes": 8563
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "69efe5ac2405dcfc3d41172fb1ebad5a7a823fceee6343adedf0aa3d1b95c8d4",
+        "bytes": 6930
+      },
+      {
+        "path": "src/auth_store.py",
+        "sha256": "9819c9a18b8dd9818e279e49eb4f174baeeb162b20a860a230c82c3d83bb4d63",
+        "bytes": 5437
+      },
+      {
+        "path": "src/camera_utils.py",
+        "sha256": "0d43aba2d1c1a36886db3d3207931fa36cce6691d5fee4f4d7eb2d7c124f8dfa",
+        "bytes": 2327
+      },
+      {
+        "path": "src/esp32_link.py",
+        "sha256": "19bce8e9d030fada229bb9853525e5be6cf87544e3fa2ffeedef1297084b6288",
+        "bytes": 2206
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "e9cac9796b22b8cbbfb50800f6984b8c5c6e22fd0caccc3465f7344b2a893d1f",
+        "bytes": 135835
+      },
+      {
+        "path": "src/live_camera.py",
+        "sha256": "10ec6cfd17007ea805abc424583007d994e8ec3d06bcc426c0c1051c54bfd040",
+        "bytes": 3437
+      },
+      {
+        "path": "src/live_ui.py",
+        "sha256": "055eae8dad8196bef84880c4e7c75eadf7844c44b2ee89c69ca4bea32a4e3803",
+        "bytes": 11549
+      },
+      {
+        "path": "src/profile_store.py",
+        "sha256": "5ae5d644b214a87fab378f9960c5409f15e5e6cefc393abc698bdabbd4a4e7f4",
+        "bytes": 9229
+      },
+      {
+        "path": "src/project_core.py",
+        "sha256": "f5f527d5bbf5417ebee635ad17cdd804432ffb0445bd67a9824b312ec02482e1",
+        "bytes": 9060
+      },
+      {
+        "path": "src/sequence_core.py",
+        "sha256": "21413051a7c57715724de1168756996daaf9f3620d8c76d6967fea3c45f11f87",
+        "bytes": 3816
+      },
+      {
+        "path": "src/sequence_ui.py",
+        "sha256": "5949d759450021b2e0bc3b034cea3dda28d8d506083c8800913bd4065e4d43f1",
+        "bytes": 21262
+      },
+      {
+        "path": "src/smoke_test.py",
+        "sha256": "5cad69b1fc4d7687672f23421c0526668cc1541dcf6b97f589be203ad493afa1",
+        "bytes": 2730
+      },
+      {
+        "path": "src/smoke_v16.py",
+        "sha256": "ff171c4da8aa8189a52794edf34643d0bf351963a114640ce3930625835daac5",
+        "bytes": 2378
+      },
+      {
+        "path": "src/yolo_core.py",
+        "sha256": "6a313ae6540646231bed92b1f43a88af131cd2296f3853896c2647352bc95718",
+        "bytes": 17995
+      }
+    ],
+    "publicado_sha256_zip": "49cd024bf7e165163156537d172a117ea615568b0f601974130ca40d78b3633b",
+    "tamano_zip": 83544,
+    "git_commit_sha": "5ebe9049d637315f95694e510b9f3cc0447ba57b"
+  },
+  {
+    "tag": "v3.16.1",
+    "etapa": 3,
+    "visbra_original": 16,
+    "revision": 1,
+    "origen": "KountA_v16_ajuste_conexion_ESP32_solo_archivos.zip",
+    "descripcion": "Ajustes de conexión y comprobación TCP con ESP32.",
+    "observacion": "Se superponen solo los archivos especificados en el ZIP de parche.",
+    "cambios": {
+      "agregados": [],
+      "retirados": [],
+      "modificados": [
+        "src/esp32_link.py",
+        "src/gui_app.py",
+        "src/sequence_ui.py"
+      ],
+      "totales": {
+        "agregados": 0,
+        "retirados": 0,
+        "modificados": 3
+      }
+    },
+    "archivos_codigo": 19,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "3b8e7fb8aa8ceee83374bea2f31e3e06291e6b0be73bca33c5b59776a37484ab",
+        "bytes": 9369
+      },
+      {
+        "path": "assets/kounta_logo.png",
+        "sha256": "f45eb652fe3f9860372b34d6c2b0fe7e01fb0c3b853f82815b7f9021836584dd",
+        "bytes": 10454
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "2280cec549db1cffe7b15e0a6c187e566f889b1c81d26bc2450bfc54822095b6",
+        "bytes": 225
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "578bd9b2eca013377c88be8665d084a805634e46613a5e1e129cf3bebbbe2499",
+        "bytes": 78
+      },
+      {
+        "path": "src/aruco_core.py",
+        "sha256": "c1c0dd2608a2fe5e614b4a46107eaa6a3d526c8ccec57e2adc263eac423ad6e4",
+        "bytes": 8563
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "69efe5ac2405dcfc3d41172fb1ebad5a7a823fceee6343adedf0aa3d1b95c8d4",
+        "bytes": 6930
+      },
+      {
+        "path": "src/auth_store.py",
+        "sha256": "9819c9a18b8dd9818e279e49eb4f174baeeb162b20a860a230c82c3d83bb4d63",
+        "bytes": 5437
+      },
+      {
+        "path": "src/camera_utils.py",
+        "sha256": "0d43aba2d1c1a36886db3d3207931fa36cce6691d5fee4f4d7eb2d7c124f8dfa",
+        "bytes": 2327
+      },
+      {
+        "path": "src/esp32_link.py",
+        "sha256": "a7598b0bbfadaa0dfbb9f393d768903fe64bbf18c94b741c0621f2440fda6657",
+        "bytes": 3120
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "f8d176c93cf162cff795a0f256e6ef4dd179edb011350f19901b7de36c4db9cd",
+        "bytes": 136516
+      },
+      {
+        "path": "src/live_camera.py",
+        "sha256": "10ec6cfd17007ea805abc424583007d994e8ec3d06bcc426c0c1051c54bfd040",
+        "bytes": 3437
+      },
+      {
+        "path": "src/live_ui.py",
+        "sha256": "055eae8dad8196bef84880c4e7c75eadf7844c44b2ee89c69ca4bea32a4e3803",
+        "bytes": 11549
+      },
+      {
+        "path": "src/profile_store.py",
+        "sha256": "5ae5d644b214a87fab378f9960c5409f15e5e6cefc393abc698bdabbd4a4e7f4",
+        "bytes": 9229
+      },
+      {
+        "path": "src/project_core.py",
+        "sha256": "f5f527d5bbf5417ebee635ad17cdd804432ffb0445bd67a9824b312ec02482e1",
+        "bytes": 9060
+      },
+      {
+        "path": "src/sequence_core.py",
+        "sha256": "21413051a7c57715724de1168756996daaf9f3620d8c76d6967fea3c45f11f87",
+        "bytes": 3816
+      },
+      {
+        "path": "src/sequence_ui.py",
+        "sha256": "9940e881a65a1ce3f102718a1a1bc7fc89f8c2d327d9a7c0e7ac45539d42e73b",
+        "bytes": 25973
+      },
+      {
+        "path": "src/smoke_test.py",
+        "sha256": "5cad69b1fc4d7687672f23421c0526668cc1541dcf6b97f589be203ad493afa1",
+        "bytes": 2730
+      },
+      {
+        "path": "src/smoke_v16.py",
+        "sha256": "ff171c4da8aa8189a52794edf34643d0bf351963a114640ce3930625835daac5",
+        "bytes": 2378
+      },
+      {
+        "path": "src/yolo_core.py",
+        "sha256": "6a313ae6540646231bed92b1f43a88af131cd2296f3853896c2647352bc95718",
+        "bytes": 17995
+      }
+    ],
+    "publicado_sha256_zip": "5d8eb236f33693448babd1bc4200805889568024b369c5d249df349d93aaa409",
+    "tamano_zip": 84921,
+    "git_commit_sha": "049a29b7988854a939f0a8e0d0e7d98adcc4ced9"
+  },
+  {
+    "tag": "v3.16.2",
+    "etapa": 3,
+    "visbra_original": 16,
+    "revision": 2,
+    "origen": "KountA_v16_pausa_3s_solo_sequence_ui.zip",
+    "descripcion": "Pausa de 3 segundos entre instrucciones de trabajo.",
+    "observacion": "Parche específico del ejecutor de secuencias.",
+    "cambios": {
+      "agregados": [],
+      "retirados": [],
+      "modificados": [
+        "src/sequence_ui.py"
+      ],
+      "totales": {
+        "agregados": 0,
+        "retirados": 0,
+        "modificados": 1
+      }
+    },
+    "archivos_codigo": 19,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "3b8e7fb8aa8ceee83374bea2f31e3e06291e6b0be73bca33c5b59776a37484ab",
+        "bytes": 9369
+      },
+      {
+        "path": "assets/kounta_logo.png",
+        "sha256": "f45eb652fe3f9860372b34d6c2b0fe7e01fb0c3b853f82815b7f9021836584dd",
+        "bytes": 10454
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "2280cec549db1cffe7b15e0a6c187e566f889b1c81d26bc2450bfc54822095b6",
+        "bytes": 225
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "578bd9b2eca013377c88be8665d084a805634e46613a5e1e129cf3bebbbe2499",
+        "bytes": 78
+      },
+      {
+        "path": "src/aruco_core.py",
+        "sha256": "c1c0dd2608a2fe5e614b4a46107eaa6a3d526c8ccec57e2adc263eac423ad6e4",
+        "bytes": 8563
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "69efe5ac2405dcfc3d41172fb1ebad5a7a823fceee6343adedf0aa3d1b95c8d4",
+        "bytes": 6930
+      },
+      {
+        "path": "src/auth_store.py",
+        "sha256": "9819c9a18b8dd9818e279e49eb4f174baeeb162b20a860a230c82c3d83bb4d63",
+        "bytes": 5437
+      },
+      {
+        "path": "src/camera_utils.py",
+        "sha256": "0d43aba2d1c1a36886db3d3207931fa36cce6691d5fee4f4d7eb2d7c124f8dfa",
+        "bytes": 2327
+      },
+      {
+        "path": "src/esp32_link.py",
+        "sha256": "a7598b0bbfadaa0dfbb9f393d768903fe64bbf18c94b741c0621f2440fda6657",
+        "bytes": 3120
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "f8d176c93cf162cff795a0f256e6ef4dd179edb011350f19901b7de36c4db9cd",
+        "bytes": 136516
+      },
+      {
+        "path": "src/live_camera.py",
+        "sha256": "10ec6cfd17007ea805abc424583007d994e8ec3d06bcc426c0c1051c54bfd040",
+        "bytes": 3437
+      },
+      {
+        "path": "src/live_ui.py",
+        "sha256": "055eae8dad8196bef84880c4e7c75eadf7844c44b2ee89c69ca4bea32a4e3803",
+        "bytes": 11549
+      },
+      {
+        "path": "src/profile_store.py",
+        "sha256": "5ae5d644b214a87fab378f9960c5409f15e5e6cefc393abc698bdabbd4a4e7f4",
+        "bytes": 9229
+      },
+      {
+        "path": "src/project_core.py",
+        "sha256": "f5f527d5bbf5417ebee635ad17cdd804432ffb0445bd67a9824b312ec02482e1",
+        "bytes": 9060
+      },
+      {
+        "path": "src/sequence_core.py",
+        "sha256": "21413051a7c57715724de1168756996daaf9f3620d8c76d6967fea3c45f11f87",
+        "bytes": 3816
+      },
+      {
+        "path": "src/sequence_ui.py",
+        "sha256": "723181da25a78da776d57d1f6fbb24d88a6f7bddf206e7e9e9ce57b9ef2887fc",
+        "bytes": 26762
+      },
+      {
+        "path": "src/smoke_test.py",
+        "sha256": "5cad69b1fc4d7687672f23421c0526668cc1541dcf6b97f589be203ad493afa1",
+        "bytes": 2730
+      },
+      {
+        "path": "src/smoke_v16.py",
+        "sha256": "ff171c4da8aa8189a52794edf34643d0bf351963a114640ce3930625835daac5",
+        "bytes": 2378
+      },
+      {
+        "path": "src/yolo_core.py",
+        "sha256": "6a313ae6540646231bed92b1f43a88af131cd2296f3853896c2647352bc95718",
+        "bytes": 17995
+      }
+    ],
+    "publicado_sha256_zip": "348a4c0aefc63dd7d5ac288cf6ef26547ba44f67df369664133f6372f6ac7e69",
+    "tamano_zip": 85159,
+    "git_commit_sha": "b5d2a6ff8d4369d29fddba54cb5987650b20f1b1"
+  },
+  {
+    "tag": "v3.16.3",
+    "etapa": 3,
+    "visbra_original": 16,
+    "revision": 3,
+    "origen": "KountA_v16_saturacion_aruco_solo_archivo.zip",
+    "descripcion": "Saturación visual por píxeles ocupados en la zona ArUco.",
+    "observacion": "Parche específico de aruco_core.py.",
+    "cambios": {
+      "agregados": [],
+      "retirados": [],
+      "modificados": [
+        "src/aruco_core.py"
+      ],
+      "totales": {
+        "agregados": 0,
+        "retirados": 0,
+        "modificados": 1
+      }
+    },
+    "archivos_codigo": 19,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "3b8e7fb8aa8ceee83374bea2f31e3e06291e6b0be73bca33c5b59776a37484ab",
+        "bytes": 9369
+      },
+      {
+        "path": "assets/kounta_logo.png",
+        "sha256": "f45eb652fe3f9860372b34d6c2b0fe7e01fb0c3b853f82815b7f9021836584dd",
+        "bytes": 10454
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "2280cec549db1cffe7b15e0a6c187e566f889b1c81d26bc2450bfc54822095b6",
+        "bytes": 225
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "578bd9b2eca013377c88be8665d084a805634e46613a5e1e129cf3bebbbe2499",
+        "bytes": 78
+      },
+      {
+        "path": "src/aruco_core.py",
+        "sha256": "a04a50a2a2bb0530f26b4f5bc016af1f1d9d95b0f51c8bfd890e34bb9e3d3dbc",
+        "bytes": 11492
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "69efe5ac2405dcfc3d41172fb1ebad5a7a823fceee6343adedf0aa3d1b95c8d4",
+        "bytes": 6930
+      },
+      {
+        "path": "src/auth_store.py",
+        "sha256": "9819c9a18b8dd9818e279e49eb4f174baeeb162b20a860a230c82c3d83bb4d63",
+        "bytes": 5437
+      },
+      {
+        "path": "src/camera_utils.py",
+        "sha256": "0d43aba2d1c1a36886db3d3207931fa36cce6691d5fee4f4d7eb2d7c124f8dfa",
+        "bytes": 2327
+      },
+      {
+        "path": "src/esp32_link.py",
+        "sha256": "a7598b0bbfadaa0dfbb9f393d768903fe64bbf18c94b741c0621f2440fda6657",
+        "bytes": 3120
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "f8d176c93cf162cff795a0f256e6ef4dd179edb011350f19901b7de36c4db9cd",
+        "bytes": 136516
+      },
+      {
+        "path": "src/live_camera.py",
+        "sha256": "10ec6cfd17007ea805abc424583007d994e8ec3d06bcc426c0c1051c54bfd040",
+        "bytes": 3437
+      },
+      {
+        "path": "src/live_ui.py",
+        "sha256": "055eae8dad8196bef84880c4e7c75eadf7844c44b2ee89c69ca4bea32a4e3803",
+        "bytes": 11549
+      },
+      {
+        "path": "src/profile_store.py",
+        "sha256": "5ae5d644b214a87fab378f9960c5409f15e5e6cefc393abc698bdabbd4a4e7f4",
+        "bytes": 9229
+      },
+      {
+        "path": "src/project_core.py",
+        "sha256": "f5f527d5bbf5417ebee635ad17cdd804432ffb0445bd67a9824b312ec02482e1",
+        "bytes": 9060
+      },
+      {
+        "path": "src/sequence_core.py",
+        "sha256": "21413051a7c57715724de1168756996daaf9f3620d8c76d6967fea3c45f11f87",
+        "bytes": 3816
+      },
+      {
+        "path": "src/sequence_ui.py",
+        "sha256": "723181da25a78da776d57d1f6fbb24d88a6f7bddf206e7e9e9ce57b9ef2887fc",
+        "bytes": 26762
+      },
+      {
+        "path": "src/smoke_test.py",
+        "sha256": "5cad69b1fc4d7687672f23421c0526668cc1541dcf6b97f589be203ad493afa1",
+        "bytes": 2730
+      },
+      {
+        "path": "src/smoke_v16.py",
+        "sha256": "ff171c4da8aa8189a52794edf34643d0bf351963a114640ce3930625835daac5",
+        "bytes": 2378
+      },
+      {
+        "path": "src/yolo_core.py",
+        "sha256": "6a313ae6540646231bed92b1f43a88af131cd2296f3853896c2647352bc95718",
+        "bytes": 17995
+      }
+    ],
+    "publicado_sha256_zip": "3c91255de01a2d26af14dbc9e42fea9db42d5fbfb98f64cdb9bba89d13f1ed9c",
+    "tamano_zip": 86163,
+    "git_commit_sha": "e928ca840531371ab678161c89dd72a7a09ee9b7"
+  },
+  {
+    "tag": "v3.16.4",
+    "etapa": 3,
+    "visbra_original": 16,
+    "revision": 4,
+    "origen": "Avance cronologico.zip::KountA_YOLO_v16",
+    "descripcion": "Ventana de resultados ampliados, pausa configurable y logotipo con mayor contraste.",
+    "observacion": "Estado final de v16 del archivo cronológico; verificado contra el último parche.",
+    "cambios": {
+      "agregados": [
+        "assets/1.png",
+        "src/prb_aruco.py"
+      ],
+      "retirados": [],
+      "modificados": [
+        "assets/kounta_logo.png",
+        "src/gui_app.py",
+        "src/sequence_core.py",
+        "src/sequence_ui.py"
+      ],
+      "totales": {
+        "agregados": 2,
+        "retirados": 0,
+        "modificados": 4
+      }
+    },
+    "archivos_codigo": 21,
+    "manifest": [
+      {
+        "path": "README.md",
+        "sha256": "3b8e7fb8aa8ceee83374bea2f31e3e06291e6b0be73bca33c5b59776a37484ab",
+        "bytes": 9369
+      },
+      {
+        "path": "assets/1.png",
+        "sha256": "f45eb652fe3f9860372b34d6c2b0fe7e01fb0c3b853f82815b7f9021836584dd",
+        "bytes": 10454
+      },
+      {
+        "path": "assets/kounta_logo.png",
+        "sha256": "841e20dca6601209789133ccb5c5880ba920cc533b482790089a9596e5883baf",
+        "bytes": 622889
+      },
+      {
+        "path": "requirements.txt",
+        "sha256": "2280cec549db1cffe7b15e0a6c187e566f889b1c81d26bc2450bfc54822095b6",
+        "bytes": 225
+      },
+      {
+        "path": "src/__init__.py",
+        "sha256": "578bd9b2eca013377c88be8665d084a805634e46613a5e1e129cf3bebbbe2499",
+        "bytes": 78
+      },
+      {
+        "path": "src/aruco_core.py",
+        "sha256": "a04a50a2a2bb0530f26b4f5bc016af1f1d9d95b0f51c8bfd890e34bb9e3d3dbc",
+        "bytes": 11492
+      },
+      {
+        "path": "src/augment_core.py",
+        "sha256": "69efe5ac2405dcfc3d41172fb1ebad5a7a823fceee6343adedf0aa3d1b95c8d4",
+        "bytes": 6930
+      },
+      {
+        "path": "src/auth_store.py",
+        "sha256": "9819c9a18b8dd9818e279e49eb4f174baeeb162b20a860a230c82c3d83bb4d63",
+        "bytes": 5437
+      },
+      {
+        "path": "src/camera_utils.py",
+        "sha256": "0d43aba2d1c1a36886db3d3207931fa36cce6691d5fee4f4d7eb2d7c124f8dfa",
+        "bytes": 2327
+      },
+      {
+        "path": "src/esp32_link.py",
+        "sha256": "a7598b0bbfadaa0dfbb9f393d768903fe64bbf18c94b741c0621f2440fda6657",
+        "bytes": 3120
+      },
+      {
+        "path": "src/gui_app.py",
+        "sha256": "1673a54a1edd6c24b1b6c22c246bc4c661c9bc0bee1bbe17a44ff7e7360c7085",
+        "bytes": 139273
+      },
+      {
+        "path": "src/live_camera.py",
+        "sha256": "10ec6cfd17007ea805abc424583007d994e8ec3d06bcc426c0c1051c54bfd040",
+        "bytes": 3437
+      },
+      {
+        "path": "src/live_ui.py",
+        "sha256": "055eae8dad8196bef84880c4e7c75eadf7844c44b2ee89c69ca4bea32a4e3803",
+        "bytes": 11549
+      },
+      {
+        "path": "src/prb_aruco.py",
+        "sha256": "d27228389845d345e9a7ed75922609fd56b08f9c49968105909332770b191fc0",
+        "bytes": 22650
+      },
+      {
+        "path": "src/profile_store.py",
+        "sha256": "5ae5d644b214a87fab378f9960c5409f15e5e6cefc393abc698bdabbd4a4e7f4",
+        "bytes": 9229
+      },
+      {
+        "path": "src/project_core.py",
+        "sha256": "f5f527d5bbf5417ebee635ad17cdd804432ffb0445bd67a9824b312ec02482e1",
+        "bytes": 9060
+      },
+      {
+        "path": "src/sequence_core.py",
+        "sha256": "1628b8749ce732a59f9153f88fedfe406152a2b6c80e8c461a3592ed203e672d",
+        "bytes": 4919
+      },
+      {
+        "path": "src/sequence_ui.py",
+        "sha256": "ff70b2e38520b2fcc788326be1d01b38d2cf69ae30ae6dbc34bf43e0f9eda5c1",
+        "bytes": 28120
+      },
+      {
+        "path": "src/smoke_test.py",
+        "sha256": "5cad69b1fc4d7687672f23421c0526668cc1541dcf6b97f589be203ad493afa1",
+        "bytes": 2730
+      },
+      {
+        "path": "src/smoke_v16.py",
+        "sha256": "ff171c4da8aa8189a52794edf34643d0bf351963a114640ce3930625835daac5",
+        "bytes": 2378
+      },
+      {
+        "path": "src/yolo_core.py",
+        "sha256": "6a313ae6540646231bed92b1f43a88af131cd2296f3853896c2647352bc95718",
+        "bytes": 17995
+      }
+    ],
+    "publicado_sha256_zip": "fdf3382b2b99114328a3e0dc786ba7a14ecd25a091ee06311952f7fce1820a37",
+    "tamano_zip": 642684,
+    "git_commit_sha": "5f0388734f4429ea03d65e844ad18f1dd2a0d5e6"
+  }
+]
