@@ -19,6 +19,7 @@ from bbox_utils import detect_bbox_white_background, save_bbox_metadata
 VALID_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 MANIFEST_NAME = ".aug_manifest.json"
 ROOT_CLASS_NAME = "__root__"
+CLASS_CONFIG_FILENAME = "augment_thresholds_config.json"
 
 
 def set_seed(seed: int) -> None:
@@ -81,6 +82,50 @@ def resolve_class_params(
         return white_threshold, min_fg
 
     return default_white_threshold, default_min_foreground_pixels
+
+
+def get_config_json_path(input_dir: Path) -> Path:
+    return input_dir / CLASS_CONFIG_FILENAME
+
+
+def save_class_config_json(
+    input_dir: Path,
+    default_white_threshold: int,
+    default_min_foreground_pixels: int,
+    class_params: dict[str, dict[str, int]],
+) -> Path:
+    input_dir.mkdir(parents=True, exist_ok=True)
+    json_path = get_config_json_path(input_dir)
+
+    payload = {
+        "default": {
+            "white_threshold": int(default_white_threshold),
+            "min_foreground_pixels": int(default_min_foreground_pixels),
+        },
+        "classes": {
+            str(class_name): {
+                "white_threshold": int(values["white_threshold"]),
+                "min_foreground_pixels": int(values["min_foreground_pixels"]),
+            }
+            for class_name, values in sorted(class_params.items())
+        },
+    }
+
+    json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    return json_path
+
+
+def load_class_config_json(input_dir: Path) -> dict:
+    json_path = get_config_json_path(input_dir)
+    if not json_path.exists():
+        return {"default": {}, "classes": {}}
+
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    if "default" not in data:
+        data["default"] = {}
+    if "classes" not in data:
+        data["classes"] = {}
+    return data
 
 
 def save_manifest(

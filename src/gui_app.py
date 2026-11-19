@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 
 from augment_core import (
+    CLASS_CONFIG_FILENAME,
     ROOT_CLASS_NAME,
     clean_generated_dataset,
     ensure_rgb,
@@ -15,6 +16,8 @@ from augment_core import (
     generate_augmented_dataset_with_bboxes,
     get_class_name,
     get_class_names,
+    load_class_config_json,
+    save_class_config_json,
 )
 from bbox_utils import (
     build_preview_image,
@@ -33,7 +36,7 @@ Notas de uso
    - Umbral de blanco
    - Mínimo de pixeles del objeto
 
-3. Si asignas umbrales por clase, esos valores tienen prioridad sobre los globales.
+3. Si configuras umbrales por clase, esos valores tienen prioridad sobre los globales.
    La clase se toma del primer nivel de carpeta dentro de input.
    Ejemplo:
    input/
@@ -53,14 +56,10 @@ Notas de uso
    - labels JSON
    - originales copiados al output
 
-7. Si una imagen no detecta objeto, revisa:
-   - umbral de blanco
-   - mínimo de pixeles
-   - calidad del fondo
+7. La configuración persistente se guarda en:
+   augment_thresholds_config.json
+   dentro de la carpeta input.
 """
-
-
-DEFAULT_SCOPE_KEY = "__default_scope__"
 
 
 class NotesWindow(tk.Toplevel):
@@ -85,27 +84,21 @@ class AugmentApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Augment Dataset + Bounding Boxes")
-        self.geometry("1400x820")
-        self.minsize(1260, 760)
+        self.geometry("1420x830")
+        self.minsize(1280, 760)
 
         self.input_dir_var = tk.StringVar()
         self.output_dir_var = tk.StringVar()
         self.copies_var = tk.StringVar(value="5")
         self.seed_var = tk.StringVar(value="42")
+        self.threshold_var = tk.StringVar(value="245")
+        self.min_fg_var = tk.StringVar(value="50")
         self.flip_var = tk.BooleanVar(value=True)
 
-        # Valores por defecto/globales
-        self.default_threshold_var = tk.StringVar(value="245")
-        self.default_min_fg_var = tk.StringVar(value="50")
-
-        # Editor visible en UI (cambia según el scope seleccionado)
-        self.threshold_editor_var = tk.StringVar(value="245")
-        self.min_fg_editor_var = tk.StringVar(value="50")
-        self.threshold_scope_var = tk.StringVar(value="General / default")
-
         self.class_params: dict[str, dict[str, int]] = {}
-        self.scope_display_to_key: dict[str, str] = {"General / default": DEFAULT_SCOPE_KEY}
-        self.current_scope_key: str = DEFAULT_SCOPE_KEY
+        self.current_scope_var = tk.StringVar(value="General / default")
+        self.scope_options: list[str] = ["General / default"]
+        self.previous_scope_display = "General / default"
 
         self.original_image_paths: list[Path] = []
         self.augmented_image_paths: list[Path] = []
@@ -113,8 +106,9 @@ class AugmentApp(tk.Tk):
         self.original_preview_photo = None
         self.augmented_preview_photo = None
 
+        self._building_scope_values = False
+
         self._build_ui()
-        self._refresh_scope_options()
 
     def _build_ui(self) -> None:
         container = ttk.Frame(self, padding=12)
@@ -159,32 +153,33 @@ class AugmentApp(tk.Tk):
         ttk.Label(form, text="Seed").grid(row=3, column=0, sticky="w", pady=5)
         ttk.Entry(form, textvariable=self.seed_var, width=12).grid(row=3, column=1, sticky="w", padx=6)
 
-        ttk.Separator(form, orient="horizontal").grid(row=4, column=0, columnspan=3, sticky="ew", pady=(8, 10))
+        ttk.Separator(form, orient="horizontal").grid(row=4, column=0, columnspan=3, sticky="ew", pady=8)
 
         ttk.Label(form, text="Editar umbrales de").grid(row=5, column=0, sticky="w", pady=5)
         self.scope_combo = ttk.Combobox(
             form,
-            textvariable=self.threshold_scope_var,
+            textvariable=self.current_scope_var,
             state="readonly",
-            width=26,
+            values=self.scope_options,
+            width=28
         )
         self.scope_combo.grid(row=5, column=1, sticky="w", padx=6)
         self.scope_combo.bind("<<ComboboxSelected>>", self.on_scope_changed)
 
-        ttk.Button(form, text="Recargar clases", command=self.reload_scope_options).grid(row=5, column=2, sticky="w")
+        ttk.Button(form, text="Recargar clases", command=self.reload_classes_and_sync_json).grid(row=5, column=2)
 
         ttk.Label(form, text="Umbral de blanco").grid(row=6, column=0, sticky="w", pady=5)
-        ttk.Entry(form, textvariable=self.threshold_editor_var, width=12).grid(row=6, column=1, sticky="w", padx=6)
+        self.scope_threshold_entry = ttk.Entry(form, width=12)
+        self.scope_threshold_entry.grid(row=6, column=1, sticky="w", padx=6)
+        self.scope_threshold_entry.bind("<FocusOut>", self.on_scope_entries_focus_out)
 
         ttk.Label(form, text="Mín. pixeles objeto").grid(row=7, column=0, sticky="w", pady=5)
-        ttk.Entry(form, textvariable=self.min_fg_editor_var, width=12).grid(row=7, column=1, sticky="w", padx=6)
-
-        ttk.Button(form, text="Guardar valores de esta selección", command=self.save_current_scope_values).grid(
-            row=8, column=1, sticky="w", padx=6, pady=(6, 4)
-        )
+        self.scope_min_fg_entry = ttk.Entry(form, width=12)
+        self.scope_min_fg_entry.grid(row=7, column=1, sticky="w", padx=6)
+        self.scope_min_fg_entry.bind("<FocusOut>", self.on_scope_entries_focus_out)
 
         ttk.Checkbutton(form, text="Permitir flip horizontal", variable=self.flip_var).grid(
-            row=9, column=1, sticky="w", padx=6, pady=6
+            row=8, column=1, sticky="w", padx=6, pady=6
         )
 
         form.columnconfigure(1, weight=1)
@@ -198,7 +193,7 @@ class AugmentApp(tk.Tk):
         tools.pack(fill="x", pady=(10, 0))
         ttk.Button(tools, text="Ver notas", command=self.open_notes_window).pack(side="left")
 
-        self.class_config_info_var = tk.StringVar(value="Sin configuración específica por clase.")
+        self.class_config_info_var = tk.StringVar(value="Sin configuración por clase aplicada.")
         ttk.Label(parent, textvariable=self.class_config_info_var, justify="left").pack(anchor="w", pady=(10, 0))
 
     def _build_center_panel(self, parent: ttk.Frame) -> None:
@@ -279,104 +274,9 @@ class AugmentApp(tk.Tk):
     def open_notes_window(self) -> None:
         NotesWindow(self)
 
-    def _display_name_for_class(self, class_name: str) -> str:
-        return "General / default" if class_name == DEFAULT_SCOPE_KEY else ("(root)" if class_name == ROOT_CLASS_NAME else class_name)
-
-    def _refresh_scope_options(self) -> None:
-        input_dir = Path(self.input_dir_var.get().strip())
-        class_names = get_class_names(input_dir) if input_dir.exists() else []
-
-        display_values = ["General / default"]
-        self.scope_display_to_key = {"General / default": DEFAULT_SCOPE_KEY}
-
-        for class_name in class_names:
-            display = self._display_name_for_class(class_name)
-            display_values.append(display)
-            self.scope_display_to_key[display] = class_name
-
-        self.scope_combo["values"] = display_values
-
-        # Mantener selección si todavía existe
-        current_display = self.threshold_scope_var.get().strip() or "General / default"
-        if current_display not in display_values:
-            current_display = "General / default"
-            self.current_scope_key = DEFAULT_SCOPE_KEY
-
-        self.threshold_scope_var.set(current_display)
-        self.current_scope_key = self.scope_display_to_key[current_display]
-        self._load_scope_values_into_editor(self.current_scope_key)
-        self._update_class_config_label()
-
-    def reload_scope_options(self) -> None:
-        try:
-            self.save_current_scope_values(show_message=False)
-        except Exception:
-            pass
-        self._refresh_scope_options()
-
-    def _load_scope_values_into_editor(self, scope_key: str) -> None:
-        if scope_key == DEFAULT_SCOPE_KEY:
-            self.threshold_editor_var.set(self.default_threshold_var.get())
-            self.min_fg_editor_var.set(self.default_min_fg_var.get())
-            return
-
-        data = self.class_params.get(scope_key, {})
-        self.threshold_editor_var.set(str(data.get("white_threshold", self.default_threshold_var.get())))
-        self.min_fg_editor_var.set(str(data.get("min_foreground_pixels", self.default_min_fg_var.get())))
-
-    def _validate_editor_values(self) -> tuple[int, int]:
-        white_threshold = int(self.threshold_editor_var.get().strip())
-        min_fg = int(self.min_fg_editor_var.get().strip())
-
-        if not (0 <= white_threshold <= 255):
-            raise ValueError("El umbral de blanco debe estar entre 0 y 255.")
-        if min_fg < 1:
-            raise ValueError("El mínimo de pixeles del objeto debe ser >= 1.")
-
-        return white_threshold, min_fg
-
-    def save_current_scope_values(self, show_message: bool = True) -> None:
-        white_threshold, min_fg = self._validate_editor_values()
-        scope_key = self.current_scope_key
-
-        if scope_key == DEFAULT_SCOPE_KEY:
-            self.default_threshold_var.set(str(white_threshold))
-            self.default_min_fg_var.set(str(min_fg))
-        else:
-            self.class_params[scope_key] = {
-                "white_threshold": white_threshold,
-                "min_foreground_pixels": min_fg,
-            }
-
-        self._update_class_config_label()
-
-        if show_message:
-            shown_name = self._display_name_for_class(scope_key)
-            messagebox.showinfo("Guardado", f"Se guardaron los valores de '{shown_name}'.")
-
-    def on_scope_changed(self, event=None) -> None:
-        selected_display = self.threshold_scope_var.get().strip()
-        new_scope_key = self.scope_display_to_key.get(selected_display, DEFAULT_SCOPE_KEY)
-
-        # Intentar guardar lo actual antes de cambiar
-        try:
-            self.save_current_scope_values(show_message=False)
-        except Exception as e:
-            # Restaurar selección previa si falla la validación
-            prev_display = self._display_name_for_class(self.current_scope_key)
-            self.threshold_scope_var.set(prev_display)
-            messagebox.showerror("Error", f"No se pudo cambiar de selección porque los valores actuales no son válidos.\n\n{e}")
-            return
-
-        self.current_scope_key = new_scope_key
-        self._load_scope_values_into_editor(new_scope_key)
-
-    def _get_default_detection_params(self) -> tuple[int, int, bool]:
-        # Asegura que el editor actual quede persistido antes de leer defaults
-        self.save_current_scope_values(show_message=False)
-
-        threshold = int(self.default_threshold_var.get().strip())
-        min_fg = int(self.default_min_fg_var.get().strip())
+    def _get_detection_params(self) -> tuple[int, int, bool]:
+        threshold = int(self.threshold_var.get().strip())
+        min_fg = int(self.min_fg_var.get().strip())
         enable_hflip = bool(self.flip_var.get())
 
         if not (0 <= threshold <= 255):
@@ -386,35 +286,220 @@ class AugmentApp(tk.Tk):
 
         return threshold, min_fg, enable_hflip
 
+    def _validate_scope_values(self, white_threshold: str, min_fg: str) -> tuple[int, int]:
+        w = int(white_threshold.strip())
+        m = int(min_fg.strip())
+
+        if not (0 <= w <= 255):
+            raise ValueError("El umbral de blanco debe estar entre 0 y 255.")
+        if m < 1:
+            raise ValueError("El mínimo de pixeles del objeto debe ser >= 1.")
+        return w, m
+
     def _update_class_config_label(self) -> None:
         if not self.class_params:
-            self.class_config_info_var.set(
-                "Default activo: "
-                f"threshold={self.default_threshold_var.get()}, "
-                f"min_fg={self.default_min_fg_var.get()}\n"
-                "Sin configuración específica por clase."
-            )
+            self.class_config_info_var.set("Sin configuración por clase aplicada.")
             return
 
-        lines = [
-            "Default activo: "
-            f"threshold={self.default_threshold_var.get()}, "
-            f"min_fg={self.default_min_fg_var.get()}",
-            "Configuración específica por clase:"
-        ]
+        lines = ["Configuración por clase activa:"]
         for class_name, data in sorted(self.class_params.items()):
-            shown_name = self._display_name_for_class(class_name)
+            shown_name = "(root)" if class_name == ROOT_CLASS_NAME else class_name
             lines.append(
                 f"- {shown_name}: threshold={data['white_threshold']}, min_fg={data['min_foreground_pixels']}"
             )
         self.class_config_info_var.set("\n".join(lines))
 
+    def _get_input_dir(self) -> Path | None:
+        raw = self.input_dir_var.get().strip()
+        if not raw:
+            return None
+        return Path(raw)
+
+    def _get_output_dir(self) -> Path | None:
+        raw = self.output_dir_var.get().strip()
+        if not raw:
+            return None
+        return Path(raw)
+
+    def write_config_json(self) -> None:
+        input_dir = self._get_input_dir()
+        if input_dir is None or not input_dir.exists():
+            return
+
+        default_threshold, default_min_fg, _ = self._get_detection_params()
+        save_class_config_json(
+            input_dir=input_dir,
+            default_white_threshold=default_threshold,
+            default_min_foreground_pixels=default_min_fg,
+            class_params=self.class_params,
+        )
+
+    def load_persisted_config_from_input(self, ask_about_missing: bool = True) -> None:
+        input_dir = self._get_input_dir()
+        if input_dir is None or not input_dir.exists():
+            return
+
+        data = load_class_config_json(input_dir)
+        default_data = data.get("default", {})
+        classes_data = data.get("classes", {})
+
+        if default_data:
+            self.threshold_var.set(str(default_data.get("white_threshold", self.threshold_var.get())))
+            self.min_fg_var.set(str(default_data.get("min_foreground_pixels", self.min_fg_var.get())))
+
+        loaded_class_params = {}
+        for class_name, values in classes_data.items():
+            loaded_class_params[class_name] = {
+                "white_threshold": int(values.get("white_threshold", 245)),
+                "min_foreground_pixels": int(values.get("min_foreground_pixels", 50)),
+            }
+
+        detected_classes = set(get_class_names(input_dir))
+        persisted_classes = set(loaded_class_params.keys())
+        missing_classes = sorted(persisted_classes - detected_classes)
+
+        self.class_params = loaded_class_params
+
+        if ask_about_missing and missing_classes:
+            shown_missing = [("(root)" if c == ROOT_CLASS_NAME else c) for c in missing_classes]
+            question = (
+                f"Se encontraron clases guardadas en {CLASS_CONFIG_FILENAME} que ya no están en input:\n\n"
+                + "\n".join(f"- {name}" for name in shown_missing)
+                + "\n\n¿Quieres eliminarlas del JSON?\n"
+                  "Si eliges 'No', se conservarán por si luego vuelves a incorporar esas clases."
+            )
+            remove = messagebox.askyesno("Clases faltantes detectadas", question)
+            if remove:
+                for cls in missing_classes:
+                    self.class_params.pop(cls, None)
+                self.write_config_json()
+
+        self.rebuild_scope_selector()
+        self.previous_scope_display = self.current_scope_var.get().strip()
+        self.load_values_into_scope_fields(self.previous_scope_display)
+        self._update_class_config_label()
+
+    def rebuild_scope_selector(self) -> None:
+        input_dir = self._get_input_dir()
+        classes = get_class_names(input_dir) if input_dir and input_dir.exists() else []
+
+        options = ["General / default"]
+        for cls in classes:
+            shown = "(root)" if cls == ROOT_CLASS_NAME else cls
+            options.append(shown)
+
+        previous = self.current_scope_var.get().strip() or "General / default"
+        self.scope_options = options
+        self.scope_combo["values"] = self.scope_options
+
+        if previous not in self.scope_options:
+            previous = "General / default"
+
+        self.current_scope_var.set(previous)
+
+    def scope_display_to_class_name(self, display_name: str) -> str | None:
+        display_name = display_name.strip()
+        if display_name == "General / default":
+            return None
+        if display_name == "(root)":
+            return ROOT_CLASS_NAME
+        return display_name
+
+    def save_scope_display_values(self, scope_display: str, white_text: str, min_text: str, silent: bool = False) -> bool:
+        try:
+            white_threshold, min_fg = self._validate_scope_values(white_text, min_text)
+            class_name = self.scope_display_to_class_name(scope_display)
+
+            if class_name is None:
+                self.threshold_var.set(str(white_threshold))
+                self.min_fg_var.set(str(min_fg))
+            else:
+                self.class_params[class_name] = {
+                    "white_threshold": white_threshold,
+                    "min_foreground_pixels": min_fg,
+                }
+
+            self.write_config_json()
+            self._update_class_config_label()
+            return True
+        except Exception as e:
+            if not silent:
+                messagebox.showerror("Error", str(e))
+            return False
+
+    def autosave_current_scope_values(self, silent: bool = False) -> bool:
+        if self._building_scope_values:
+            return True
+        return self.save_scope_display_values(
+            self.current_scope_var.get().strip(),
+            self.scope_threshold_entry.get(),
+            self.scope_min_fg_entry.get(),
+            silent=silent
+        )
+
+    def load_values_into_scope_fields(self, scope_display: str | None = None) -> None:
+        if scope_display is None:
+            scope_display = self.current_scope_var.get().strip()
+
+        class_name = self.scope_display_to_class_name(scope_display)
+
+        global_threshold = self.threshold_var.get().strip()
+        global_min_fg = self.min_fg_var.get().strip()
+
+        if class_name is None:
+            threshold_value = global_threshold
+            min_fg_value = global_min_fg
+        else:
+            data = self.class_params.get(class_name, {})
+            threshold_value = str(data.get("white_threshold", global_threshold))
+            min_fg_value = str(data.get("min_foreground_pixels", global_min_fg))
+
+        self._building_scope_values = True
+        try:
+            self.scope_threshold_entry.delete(0, "end")
+            self.scope_threshold_entry.insert(0, threshold_value)
+
+            self.scope_min_fg_entry.delete(0, "end")
+            self.scope_min_fg_entry.insert(0, min_fg_value)
+        finally:
+            self._building_scope_values = False
+
+    def on_scope_entries_focus_out(self, event=None) -> None:
+        self.autosave_current_scope_values(silent=True)
+
+    def on_scope_changed(self, event=None) -> None:
+        new_scope = self.current_scope_var.get().strip()
+        old_scope = self.previous_scope_display
+
+        if not self.save_scope_display_values(
+            old_scope,
+            self.scope_threshold_entry.get(),
+            self.scope_min_fg_entry.get(),
+            silent=True
+        ):
+            self.current_scope_var.set(old_scope)
+            return
+
+        self.previous_scope_display = new_scope
+        self.load_values_into_scope_fields(new_scope)
+
+    def reload_classes_and_sync_json(self) -> None:
+        try:
+            self.autosave_current_scope_values(silent=True)
+            self.load_persisted_config_from_input(ask_about_missing=True)
+            self.refresh_original_list()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
     def select_input_dir(self) -> None:
         folder = filedialog.askdirectory(title="Selecciona la carpeta input")
         if folder:
             self.input_dir_var.set(folder)
+            self.load_persisted_config_from_input(ask_about_missing=True)
             self.refresh_original_list()
-            self._refresh_scope_options()
+
+            # Si no existe JSON todavía, crear uno inicial con lo que haya cargado
+            self.write_config_json()
 
     def select_output_dir(self) -> None:
         folder = filedialog.askdirectory(title="Selecciona la carpeta output")
@@ -424,8 +509,8 @@ class AugmentApp(tk.Tk):
 
     def refresh_original_list(self) -> None:
         try:
-            input_dir = Path(self.input_dir_var.get().strip())
-            if not input_dir.exists():
+            input_dir = self._get_input_dir()
+            if input_dir is None or not input_dir.exists():
                 raise FileNotFoundError("La carpeta input no existe.")
 
             self.original_image_paths = find_images(input_dir)
@@ -434,7 +519,10 @@ class AugmentApp(tk.Tk):
             for p in self.original_image_paths:
                 self.original_listbox.insert("end", str(p.relative_to(input_dir)))
 
-            self._refresh_scope_options()
+            self.rebuild_scope_selector()
+            self.previous_scope_display = self.current_scope_var.get().strip()
+            self.load_values_into_scope_fields(self.previous_scope_display)
+            self._update_class_config_label()
 
             if not self.original_image_paths:
                 self.clear_original_preview()
@@ -443,11 +531,11 @@ class AugmentApp(tk.Tk):
 
     def refresh_augmented_list(self) -> None:
         try:
-            output_dir = Path(self.output_dir_var.get().strip())
-            aug_dir = output_dir / "augmented_images"
-
-            if not output_dir.exists():
+            output_dir = self._get_output_dir()
+            if output_dir is None or not output_dir.exists():
                 raise FileNotFoundError("La carpeta output no existe.")
+
+            aug_dir = output_dir / "augmented_images"
             if not aug_dir.exists():
                 self.augmented_image_paths = []
                 self.augmented_listbox.delete(0, "end")
@@ -485,13 +573,15 @@ class AugmentApp(tk.Tk):
 
     def update_original_preview(self) -> None:
         try:
+            self.autosave_current_scope_values(silent=True)
+
             image_path = self.get_selected_original_path()
             if image_path is None:
                 self.clear_original_preview()
                 return
 
-            input_dir = Path(self.input_dir_var.get().strip())
-            global_threshold, global_min_fg, _ = self._get_default_detection_params()
+            input_dir = self._get_input_dir()
+            global_threshold, global_min_fg, _ = self._get_detection_params()
 
             class_name = get_class_name(input_dir, image_path)
             class_params = self.class_params.get(class_name, {})
@@ -510,7 +600,7 @@ class AugmentApp(tk.Tk):
             self.original_preview_photo = ImageTk.PhotoImage(preview)
             self.original_preview_label.configure(image=self.original_preview_photo, text="")
 
-            shown_class = self._display_name_for_class(class_name)
+            shown_class = "(root)" if class_name == ROOT_CLASS_NAME else class_name
 
             if bbox is None:
                 self.original_preview_info_var.set(
@@ -537,7 +627,7 @@ class AugmentApp(tk.Tk):
                 self.clear_augmented_preview()
                 return
 
-            output_dir = Path(self.output_dir_var.get().strip())
+            output_dir = self._get_output_dir()
             aug_dir = output_dir / "augmented_images"
             labels_dir = output_dir / "augmented_labels"
 
@@ -556,7 +646,7 @@ class AugmentApp(tk.Tk):
 
             x1, y1, x2, y2 = [round(float(v), 2) for v in bbox]
             class_name = data.get("class_name", "desconocida")
-            shown_class = self._display_name_for_class(class_name)
+            shown_class = "(root)" if class_name == ROOT_CLASS_NAME else class_name
             white_threshold = data.get("white_threshold")
             min_fg = data.get("min_foreground_pixels")
 
@@ -592,14 +682,19 @@ class AugmentApp(tk.Tk):
 
     def generate_action(self) -> None:
         try:
-            input_dir = Path(self.input_dir_var.get().strip())
-            output_dir = Path(self.output_dir_var.get().strip())
+            if not self.autosave_current_scope_values(silent=True):
+                raise ValueError("No se pudieron guardar los valores actuales de umbral.")
+
+            input_dir = self._get_input_dir()
+            output_dir = self._get_output_dir()
             copies = int(self.copies_var.get().strip())
             seed = int(self.seed_var.get().strip())
-            threshold, min_fg, enable_hflip = self._get_default_detection_params()
+            threshold, min_fg, enable_hflip = self._get_detection_params()
 
-            if not input_dir.exists():
+            if input_dir is None or not input_dir.exists():
                 raise FileNotFoundError("La carpeta input no existe.")
+            if output_dir is None:
+                raise FileNotFoundError("Debes seleccionar una carpeta output.")
             if copies < 1:
                 raise ValueError("El número de copias debe ser >= 1.")
 
@@ -621,7 +716,7 @@ class AugmentApp(tk.Tk):
 
             class_lines = ["Mapa de clases:"]
             for class_name, class_id in class_to_id.items():
-                shown_name = self._display_name_for_class(class_name)
+                shown_name = "(root)" if class_name == ROOT_CLASS_NAME else class_name
                 class_lines.append(f"- {shown_name}: {class_id}")
 
             skipped_msg = ""
@@ -648,8 +743,8 @@ class AugmentApp(tk.Tk):
 
     def clean_action(self) -> None:
         try:
-            output_dir = Path(self.output_dir_var.get().strip())
-            if not output_dir.exists():
+            output_dir = self._get_output_dir()
+            if output_dir is None or not output_dir.exists():
                 raise FileNotFoundError("La carpeta output no existe.")
 
             summary = clean_generated_dataset(output_dir=output_dir)
