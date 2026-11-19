@@ -594,6 +594,48 @@ class KountApp(tk.Tk):
                 self._emit('error',f'Importación v14: {exc}')
         self._start_worker('migration',worker)
 
+    def _ask_choice(self, title: str, prompt: str,
+                    choices: tuple[tuple[str, str], ...],
+                    default: str) -> str | None:
+        """Selector modal de opciones fijas. Devuelve el valor interno o None al cancelar."""
+        labels = {label: value for label, value in choices}
+        default_label = next((label for label, value in choices if value == default), choices[0][0])
+        result = {'value': None}
+        dialog = tk.Toplevel(self)
+        dialog.title(title)
+        dialog.configure(bg=self._palette()['bg'])
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        body = ttk.Frame(dialog, padding=22)
+        body.pack(fill='both', expand=True)
+        ttk.Label(body, text=prompt, wraplength=390, justify='left').pack(anchor='w', pady=(0, 12))
+        selection = tk.StringVar(value=default_label)
+        combo = ttk.Combobox(body, textvariable=selection, values=list(labels),
+                             state='readonly', width=39)
+        combo.pack(fill='x', pady=(0, 18))
+        buttons = ttk.Frame(body)
+        buttons.pack(fill='x')
+
+        def finish(accept: bool):
+            if accept:
+                result['value'] = labels.get(selection.get())
+            dialog.destroy()
+
+        ttk.Button(buttons, text='Cancelar', command=lambda: finish(False)).pack(side='right', padx=(8, 0))
+        ttk.Button(buttons, text='Aceptar', style='Primary.TButton',
+                   command=lambda: finish(True)).pack(side='right')
+        dialog.protocol('WM_DELETE_WINDOW', lambda: finish(False))
+        dialog.bind('<Escape>', lambda _event: finish(False))
+        dialog.bind('<Return>', lambda _event: finish(True))
+        dialog.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() - dialog.winfo_width()) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f'+{max(0, x)}+{max(0, y)}')
+        dialog.grab_set()
+        combo.focus_set()
+        self.wait_window(dialog)
+        return result['value']
+
     def _create_profile(self):
         if self.busy:
             messagebox.showwarning('Proceso activo','Espera al proceso actual.');return
@@ -601,10 +643,12 @@ class KountApp(tk.Tk):
         if not name:return
         classes=simpledialog.askstring('Clases','Clases iniciales separadas por coma (ej.: luneta_fija, luneta_movil):',parent=self)
         if not classes:return
-        choice=simpledialog.askstring('ArUco','Modo ArUco: none / optional / required\n(none = sin ArUco; optional = opcional; required = obligatorio):',initialvalue='none',parent=self)
+        choice=self._ask_choice('Configuración ArUco', '¿Cómo utilizará ArUco este perfil?',
+                                (('Sin ArUco', 'none'), ('ArUco opcional', 'optional'),
+                                 ('ArUco obligatorio', 'required')), default='none')
         if choice is None:return
         try:
-            cfg=self.profiles.create(name,[x.strip() for x in classes.split(',')],choice.strip().lower())
+            cfg=self.profiles.create(name,[x.strip() for x in classes.split(',')],choice)
             self._select_profile(cfg['id'])
             self._refresh_profiles_tab()
         except Exception as exc:messagebox.showerror('Crear perfil',str(exc))
@@ -708,11 +752,12 @@ class KountApp(tk.Tk):
         if not username:return
         password=simpledialog.askstring('Crear usuario','Contraseña (mínimo 8 caracteres):',parent=self,show='*')
         if password is None:return
-        role=simpledialog.askstring('Crear usuario','Rol: owner / engineer / operator',
-                                    initialvalue='operator',parent=self)
+        role=self._ask_choice('Crear usuario', 'Selecciona el rol de la nueva cuenta:',
+                              (('Dueño', 'owner'), ('Ingeniero', 'engineer'),
+                               ('Operador', 'operator')), default='operator')
         if role is None:return
         try:
-            self.users.add_user(username,password,role.strip().lower())
+            self.users.add_user(username,password,role)
             self._refresh_users_table()
             messagebox.showinfo('Usuario','Cuenta creada correctamente.')
         except Exception as exc:messagebox.showerror('Usuario',str(exc))
@@ -734,13 +779,18 @@ class KountApp(tk.Tk):
     def _change_user_role(self):
         name=self._selected_user()
         if not name:return
-        role=simpledialog.askstring('Cambiar rol',f'Nuevo rol de {name}: owner / engineer / operator',
-                                    parent=self)
+        if name == self.username:
+            messagebox.showerror('Usuario',
+                'No cambies tu propio rol durante la sesión. Utiliza otra cuenta de dueño.')
+            return
+        current_role=next((u['role'] for u in self.users.user_details()
+                           if u['username']==name), 'operator')
+        role=self._ask_choice('Cambiar rol', f'Selecciona el nuevo rol de {name}:',
+                              (('Dueño', 'owner'), ('Ingeniero', 'engineer'),
+                               ('Operador', 'operator')), default=current_role)
         if role is None:return
         try:
-            if name==self.username:
-                raise ValueError('No cambies tu propio rol durante la sesión. Utiliza otra cuenta de dueño.')
-            self.users.update_user(name,role=role.strip().lower())
+            self.users.update_user(name,role=role)
             self._refresh_users_table()
         except Exception as exc:messagebox.showerror('Usuario',str(exc))
 
