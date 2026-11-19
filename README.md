@@ -1,14 +1,14 @@
-# Visbra / Kount-A — v2.14.0
+# Visbra / Kount-A — v3.15.0
 
 **Reconstrucción documental de la entrega histórica de Visbra.**
 
-- **Etiqueta técnica:** `v2.14.0`
-- **Etapa:** 2 de 3
-- **Versión original del proyecto:** 14
+- **Etiqueta técnica:** `v3.15.0`
+- **Etapa:** 3 de 3
+- **Versión original del proyecto:** 15
 - **Revisión documentada:** 0
-- **Cambio principal:** Transición al flujo YOLO, etiquetado multiobjeto y administración de BBox.
-- **Procedencia:** `KountA_YOLO_v14`
-- **Nota:** Los pesos preentrenados y entrenados se excluyen.
+- **Cambio principal:** Se incorporan perfiles, roles, HMI ampliada y medición mediante ArUco.
+- **Procedencia:** `KountA_YOLO_v15.zip`
+- **Nota:** Primera entrega v15 verificable, recuperada del ZIP previo.
 
 La numeración de GitHub es una convención documental personalizada, **no implica compatibilidad con versionado semántico estándar**. Los commits y las etiquetas fueron reconstruidos a partir de archivos proporcionados y **no representan fechas originales de desarrollo**.
 

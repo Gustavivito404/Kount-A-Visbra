@@ -4,7 +4,7 @@ import queue
 import threading
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 
 from PIL import Image, ImageTk
 
@@ -16,43 +16,197 @@ from .project_core import (
 from .augment_core import generate_augmentations
 from .yolo_core import train_yolo, predict_image, export_yolo_dataset
 from .camera_utils import scan_cameras, capture_camera
+from .profile_store import ProfileManager
+from .auth_store import UserStore
+from . import aruco_core
+from .project_core import set_active_classes
 
 
 class KountApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('Kount-A | Dataset, BBox, Augmentación y YOLO v14')
-        self.geometry('1500x890')
-        self.minsize(1120, 720)
-        self.message_queue = queue.Queue()
+        self.title('Kount-A v15 | Plataforma de inspección')
+        self.geometry('1500x900')
+        self.minsize(1100, 730)
         self.project_root = Path(__file__).resolve().parent.parent
-        self.session_path = self.project_root / 'ui_session_config.json'
-        self.input_var = tk.StringVar(value=str(self.project_root / 'input'))
-        self.output_var = tk.StringVar(value=str(self.project_root / 'output'))
-        self.status_var = tk.StringVar(value='Selecciona las carpetas input y output.')
-        self.current_image: Path | None = None
-        self.current_pil: Image.Image | None = None
-        self.current_objects: list[dict] = []
+        self.profiles = ProfileManager(self.project_root)
+        self.users = UserStore(self.project_root)
+        self.theme_file = self.project_root / 'config' / 'appearance.json'
+        self.theme_name = 'dark'
+        try:
+            self.theme_name = json.loads(self.theme_file.read_text(encoding='utf-8')).get('theme','dark')
+        except (OSError, ValueError):
+            pass
+        self.role = None
+        self.username = None
+        self.active_profile = None
+        self.message_queue = queue.Queue()
+        self.busy = set()
+        self.session_path = self.project_root / 'config' / 'ui_session_config.json'
+        self.input_var = tk.StringVar()
+        self.output_var = tk.StringVar()
+        self.status_var = tk.StringVar(value='Inicia sesión para continuar.')
+        self.current_image = None
+        self.current_pil = None
+        self.current_objects = []
         self.selected_bbox = -1
         self.dirty = False
-        self.image_files: list[Path] = []
+        self.image_files = []
         self.editor_view = {}
         self.preview_refs = {}
-        self.aug_orig_files: list[Path] = []
-        self.aug_generated_files: list[Path] = []
+        self.aug_orig_files = []
+        self.aug_generated_files = []
         self.aug_current_original = None
         self.aug_current_aug = None
         self.test_image = None
         self.test_detections = []
-        self.available_cameras: list[dict] = []
-        self.busy = set()
+        self.test_display_image = None
+        self.available_cameras = []
         self._mouse_start = None
         self._rubber_id = None
         self._configure_vars()
-        self._build_ui()
-        self._load_session()
+        self._apply_theme()
+        self._build_login()
         self.after(100, self._poll_queue)
         self.protocol('WM_DELETE_WINDOW', self._on_close)
+
+    def _palette(self):
+        if self.theme_name == 'light':
+            return dict(bg='#FFFFFF', panel='#F2F6FB', field='#FFFFFF', text='#101820',
+                        subtle='#526276', blue='#1675D1', blue_hover='#075FAF', border='#CED9E5',
+                        canvas='#E8EFF7', selected='#D5E9FC')
+        return dict(bg='#181B20', panel='#252A31', field='#2D333C', text='#F1F6FC',
+                    subtle='#B8C7D8', blue='#1675D1', blue_hover='#298CE8', border='#46505D',
+                    canvas='#151A21', selected='#244D78')
+
+    def _apply_theme(self):
+        p = self._palette()
+        self.configure(bg=p['bg'])
+        style = ttk.Style(self)
+        style.theme_use('clam')
+        style.configure('.', background=p['bg'], foreground=p['text'], font=('Segoe UI',10))
+        style.configure('TFrame', background=p['bg'])
+        style.configure('TLabel', background=p['bg'], foreground=p['text'])
+        style.configure('TLabelFrame', background=p['bg'], foreground=p['text'], bordercolor=p['border'])
+        style.configure('TLabelFrame.Label', background=p['bg'], foreground=p['blue'], font=('Segoe UI',10,'bold'))
+        style.configure('TButton', background=p['panel'], foreground=p['text'], padding=(9,6), bordercolor=p['border'])
+        style.map('TButton', background=[('active',p['blue_hover']),('pressed',p['blue'])],
+                  foreground=[('active','#FFFFFF')])
+        style.configure('Primary.TButton', background=p['blue'], foreground='#FFFFFF', padding=(12,7), bordercolor=p['blue'])
+        style.map('Primary.TButton', background=[('active',p['blue_hover'])])
+        style.configure('TNotebook', background=p['bg'], bordercolor=p['border'])
+        style.configure('TNotebook.Tab', background=p['panel'], foreground=p['text'], padding=(13,9))
+        style.map('TNotebook.Tab', background=[('selected',p['blue']),('active',p['blue_hover'])],
+                  foreground=[('selected','#FFFFFF'),('active','#FFFFFF')])
+        for name in ('TEntry','TCombobox','TSpinbox'):
+            style.configure(name, fieldbackground=p['field'], foreground=p['text'],
+                            background=p['panel'], bordercolor=p['border'])
+        style.map('TCombobox', fieldbackground=[('readonly',p['field'])],
+                  foreground=[('readonly',p['text'])])
+        style.configure('Treeview', background=p['field'], fieldbackground=p['field'],
+                        foreground=p['text'], rowheight=26)
+        style.map('Treeview', background=[('selected',p['blue'])], foreground=[('selected','#FFFFFF')])
+        style.configure('Treeview.Heading', background=p['panel'], foreground=p['text'])
+        style.configure('TCheckbutton', background=p['bg'], foreground=p['text'])
+        style.configure('TRadiobutton', background=p['bg'], foreground=p['text'])
+        style.configure('TProgressbar', background=p['blue'], troughcolor=p['panel'])
+        self._recolor_tk(self)
+        try:
+            self.theme_file.parent.mkdir(parents=True, exist_ok=True)
+            self.theme_file.write_text(json.dumps({'theme':self.theme_name}),encoding='utf-8')
+        except OSError:
+            pass
+
+    def _recolor_tk(self, parent):
+        p = self._palette()
+        for obj in parent.winfo_children():
+            try:
+                if isinstance(obj, tk.Listbox):
+                    obj.configure(bg=p['field'], fg=p['text'], selectbackground=p['blue'],
+                                  selectforeground='white', highlightbackground=p['border'])
+                elif isinstance(obj, tk.Text):
+                    obj.configure(bg=p['field'], fg=p['text'], insertbackground=p['text'],
+                                  selectbackground=p['blue'], highlightbackground=p['border'])
+                elif isinstance(obj, tk.Canvas):
+                    obj.configure(bg=p['canvas'])
+                elif isinstance(obj, (tk.Entry,)):
+                    obj.configure(bg=p['field'], fg=p['text'], insertbackground=p['text'])
+            except tk.TclError:
+                pass
+            self._recolor_tk(obj)
+
+    def _toggle_theme(self):
+        self.theme_name = 'light' if self.theme_name == 'dark' else 'dark'
+        self._apply_theme()
+        if hasattr(self,'theme_button') and self.theme_button.winfo_exists():
+            self.theme_button.configure(text='☀ Claro / ☾ Oscuro')
+
+    def _build_login(self):
+        self.login_screen = ttk.Frame(self, padding=35)
+        self.login_screen.pack(fill='both',expand=True)
+        wrapper = ttk.Frame(self.login_screen, padding=30)
+        wrapper.place(relx=.5,rely=.49,anchor='center')
+        logo_file = self.project_root / 'assets' / 'kounta_logo.png'
+        if logo_file.is_file():
+            try:
+                with Image.open(logo_file) as im:
+                    photo = im.convert('RGBA').copy()
+                photo.thumbnail((370,185))
+                self.login_logo = ImageTk.PhotoImage(photo)
+                ttk.Label(wrapper, image=self.login_logo).pack(pady=(0,17))
+            except (OSError, ValueError):
+                ttk.Label(wrapper,text='KOUNT-A',font=('Segoe UI',34,'bold')).pack(pady=16)
+        else:
+            ttk.Label(wrapper,text='KOUNT-A',font=('Segoe UI',34,'bold')).pack(pady=16)
+        ttk.Label(wrapper,text='Plataforma de inspección y conteo',font=('Segoe UI',12)).pack(pady=(0,20))
+        self.login_user = tk.StringVar()
+        self.login_pass = tk.StringVar()
+        for title, var, hidden in [('Usuario',self.login_user,False),('Contraseña',self.login_pass,True)]:
+            ttk.Label(wrapper,text=title).pack(anchor='w',pady=(8,2))
+            ent=ttk.Entry(wrapper,textvariable=var,width=37,show='●' if hidden else '')
+            ent.pack(fill='x',ipady=5)
+            if not hidden:
+                ent.focus_set()
+        if not self.users.has_users:
+            ttk.Label(wrapper,text='Primera ejecución: crea la cuenta de ingeniero.',
+                      foreground=self._palette()['blue']).pack(pady=12)
+            label='Crear cuenta de ingeniero'
+        else:
+            label='Iniciar sesión'
+        ttk.Button(wrapper,text=label,style='Primary.TButton',command=self._submit_login).pack(fill='x',pady=(20,10))
+        self.bind('<Return>',lambda _e:self._submit_login())
+        ttk.Button(wrapper,text='☀ Claro / ☾ Oscuro',command=self._toggle_theme).pack(pady=5)
+        self._recolor_tk(self)
+
+    def _submit_login(self):
+        username,password=self.login_user.get(),self.login_pass.get()
+        try:
+            if not self.users.has_users:
+                self.users.add_user(username,password,'engineer')
+                role='engineer'
+            else:
+                role=self.users.login(username,password)
+                if not role:
+                    messagebox.showerror('Acceso','Usuario o contraseña incorrectos.')
+                    return
+        except Exception as exc:
+            messagebox.showerror('Usuario',str(exc)); return
+        self.username=username.strip().lower()
+        self.role=role
+        self.unbind('<Return>')
+        self.login_screen.destroy()
+        self._open_workspace()
+
+    def _open_workspace(self):
+        all_profiles=self.profiles.list_profiles() if self.role=='engineer' else self.profiles.approved_profiles()
+        if all_profiles:
+            self._select_profile(all_profiles[0]['id'],rebuild=False)
+        self._build_ui()
+        if self.role=='engineer':
+            self._load_session()
+        else:
+            self._refresh_operator_profiles()
+        self._recolor_tk(self)
 
     def _configure_vars(self):
         self.bbox_class = tk.StringVar(value=CLASS_NAMES[0])
@@ -92,31 +246,420 @@ class KountApp(tk.Tk):
         self.camera_choice = tk.StringVar(value='Presiona Buscar cámaras')
         self.camera_width = tk.StringVar(value='1280')
         self.camera_height = tk.StringVar(value='720')
+        self.camera_autofocus = tk.BooleanVar(value=True)
+        self.camera_focus = tk.StringVar(value='50')
+        self.test_mode = tk.StringVar(value='Combinado')
+        self.active_profile_var = tk.StringVar(value='Sin perfil')
+        self.aruco_mode_var = tk.StringVar(value='optional')
 
     def _build_ui(self):
-        root = ttk.Frame(self, padding=10)
-        root.pack(fill='both', expand=True)
-        top = ttk.Frame(root)
-        top.pack(fill='x', pady=(0, 8))
-        ttk.Label(top, text='Input de fotografías').grid(row=0, column=0, sticky='w')
-        ttk.Entry(top, textvariable=self.input_var).grid(row=0, column=1, sticky='ew', padx=5)
-        ttk.Button(top, text='Examinar', command=self._choose_input).grid(row=0, column=2)
-        ttk.Label(top, text='Output de resultados').grid(row=1, column=0, sticky='w', pady=5)
-        ttk.Entry(top, textvariable=self.output_var).grid(row=1, column=1, sticky='ew', padx=5)
-        ttk.Button(top, text='Examinar', command=self._choose_output).grid(row=1, column=2)
-        ttk.Button(top, text='Recargar imágenes', command=self._refresh_images).grid(row=0, column=3, rowspan=2, padx=12)
-        top.columnconfigure(1, weight=1)
-        self.nb = ttk.Notebook(root)
-        self.nb.pack(fill='both', expand=True)
-        tabs = [ttk.Frame(self.nb, padding=6) for _ in range(4)]
-        for tab, name in zip(tabs, ('1 · BBox y etiquetado', '2 · Augmentación y revisión',
-                                    '3 · Entrenamiento YOLO', '4 · Prueba y conteo')):
-            self.nb.add(tab, text=name)
-        self._build_bbox_tab(tabs[0])
-        self._build_augment_tab(tabs[1])
-        self._build_train_tab(tabs[2])
-        self._build_test_tab(tabs[3])
-        ttk.Label(root, textvariable=self.status_var, anchor='w').pack(fill='x', pady=(6, 0))
+        self.workspace = ttk.Frame(self,padding=10)
+        self.workspace.pack(fill='both',expand=True)
+        bar=ttk.Frame(self.workspace)
+        bar.pack(fill='x',pady=(0,8))
+        ttk.Label(bar,text='KOUNT-A  |  v15',font=('Segoe UI',17,'bold'),
+                  foreground=self._palette()['blue']).pack(side='left',padx=(0,15))
+        ttk.Label(bar,text=f'{self.username}  ·  {"Ingeniero" if self.role=="engineer" else "Operador"}').pack(side='left',padx=8)
+        ttk.Button(bar,text='Cerrar sesión',command=self._logout).pack(side='right',padx=4)
+        self.theme_button=ttk.Button(bar,text='☀ Claro / ☾ Oscuro',command=self._toggle_theme)
+        self.theme_button.pack(side='right',padx=4)
+        ttk.Label(bar,text='Perfil:').pack(side='left',padx=(15,4))
+        self.profile_selector=ttk.Combobox(bar,textvariable=self.active_profile_var,state='readonly',width=28)
+        self.profile_selector.pack(side='left')
+        self.profile_selector.bind('<<ComboboxSelected>>', self._on_profile_combo)
+        if self.role=='engineer':
+            top=ttk.Frame(self.workspace)
+            top.pack(fill='x',pady=(0,8))
+            ttk.Label(top,text='Input de fotografías').grid(row=0,column=0,sticky='w')
+            ttk.Entry(top,textvariable=self.input_var,state='readonly').grid(row=0,column=1,sticky='ew',padx=5)
+            ttk.Label(top,text='Output de resultados').grid(row=1,column=0,sticky='w',pady=4)
+            ttk.Entry(top,textvariable=self.output_var,state='readonly').grid(row=1,column=1,sticky='ew',padx=5)
+            ttk.Button(top,text='Recargar imágenes',command=self._refresh_images).grid(row=0,column=2,rowspan=2,padx=12)
+            top.columnconfigure(1,weight=1)
+        self.nb=ttk.Notebook(self.workspace)
+        self.nb.pack(fill='both',expand=True)
+        if self.role=='engineer':
+            names=('1 · Perfiles', '2 · BBox y etiquetado','3 · Augmentación y revisión',
+                   '4 · Entrenamiento YOLO','5 · Prueba y conteo','6 · Calibración ArUco')
+            tabs=[ttk.Frame(self.nb,padding=6) for _ in names]
+            for tab,name in zip(tabs,names):self.nb.add(tab,text=name)
+            self._build_profiles_tab(tabs[0])
+            self._build_bbox_tab(tabs[1])
+            self._build_augment_tab(tabs[2])
+            self._build_train_tab(tabs[3])
+            self._build_test_tab(tabs[4])
+            self._build_aruco_tab(tabs[5])
+        else:
+            tab=ttk.Frame(self.nb,padding=6)
+            self.nb.add(tab,text='Producción · Captura y análisis')
+            self._build_operator_tab(tab)
+        ttk.Label(self.workspace,textvariable=self.status_var,anchor='w').pack(fill='x',pady=(6,0))
+        self._refresh_profile_selector()
+
+    def _logout(self):
+        if self.busy:
+            messagebox.showwarning('Proceso activo','Espera a que terminen los procesos antes de cerrar sesión.')
+            return
+        if self.role=='engineer' and not self._resolve_dirty():return
+        if self.role=='engineer':
+            try:self._save_session()
+            except OSError:pass
+        self.workspace.destroy()
+        self.username=self.role=None
+        self.active_profile=None
+        self._build_login()
+
+    def _refresh_profile_selector(self):
+        profiles=self.profiles.list_profiles() if self.role=='engineer' else self.profiles.approved_profiles()
+        self.profile_ids=[p['id'] for p in profiles]
+        labels=[p['name'] for p in profiles]
+        self.profile_selector.configure(values=labels)
+        if self.active_profile and self.active_profile['id'] in self.profile_ids:
+            self.profile_selector.current(self.profile_ids.index(self.active_profile['id']))
+        else:
+            self.profile_selector.set('Sin perfiles autorizados' if self.role=='operator' else 'Elige un perfil')
+
+    def _on_profile_combo(self,_event=None):
+        i=self.profile_selector.current()
+        if i<0 or i>=len(self.profile_ids):return
+        new=self.profile_ids[i]
+        if self.active_profile and new==self.active_profile['id']:return
+        if self.busy:
+            messagebox.showwarning('Proceso activo','Espera a que finalice el proceso antes de cambiar de perfil.')
+            self._refresh_profile_selector();return
+        if self.role=='engineer' and not self._resolve_dirty():
+            self._refresh_profile_selector();return
+        self._select_profile(new)
+
+    def _select_profile(self, profile_id, rebuild=True):
+        cfg=self.profiles.load(profile_id)
+        if self.role=='operator' and cfg not in self.profiles.approved_profiles():
+            raise ValueError('Perfil no autorizado.')
+        self.active_profile=cfg
+        set_active_classes(cfg['classes'])
+        folder=self.profiles.profile_dir(profile_id)
+        self.input_var.set(str(folder/'input'))
+        self.output_var.set(str(folder/'output'))
+        self.current_image=self.current_pil=None
+        self.current_objects=[]
+        self.dirty=False
+        self.test_image=None
+        self.test_display_image=None
+        self.test_detections=[]
+        self.last_trained=None
+        self.aruco_mode_var.set(cfg['aruco_mode'])
+        self.test_mode.set('Combinado')
+        if hasattr(self, 'test_mode_combo') and self.test_mode_combo.winfo_exists():
+            self.test_mode_combo.configure(values=('Combinado','Comparativo') if cfg['aruco_mode']!='none' else ('Combinado',))
+        approved=cfg.get('approved_model')
+        self.test_model.set(str(folder/approved) if approved else '')
+        if rebuild:
+            if self.role=='engineer':
+                self.bbox_class.set(CLASS_NAMES[0])
+                self.bbox_combo.configure(values=CLASS_NAMES)
+                self.aug_current_original=self.aug_current_aug=None
+                self._refresh_images()
+                self._refresh_profiles_tab()
+                self._load_aruco_config()
+                self.test_summary.set('Sin conteo.')
+                self._set_text(self.test_details,'')
+                self._rerender_test()
+                self._render_editor()
+            else:
+                self.test_summary.set('Listo para capturar.')
+                self._set_text(self.test_details,'')
+                self._rerender_test()
+            self._refresh_profile_selector()
+            if hasattr(self,'test_mode_combo'):
+                self.test_mode_combo.configure(values=('Combinado',) if cfg['aruco_mode']=='none' else ('Combinado','Comparativo'))
+        self.status_var.set(f'Perfil activo: {cfg["name"]} · {len(cfg["classes"])} clases')
+
+    def _build_profiles_tab(self, tab):
+        tab.columnconfigure(0,weight=2);tab.columnconfigure(1,weight=4);tab.rowconfigure(0,weight=1)
+        left=ttk.LabelFrame(tab,text='Perfiles del sistema',padding=12)
+        left.grid(row=0,column=0,sticky='nsew',padx=4)
+        self.profiles_list=tk.Listbox(left,exportselection=False,height=15)
+        self.profiles_list.pack(fill='both',expand=True,pady=4)
+        self.profiles_list.bind('<<ListboxSelect>>',self._profiles_item_select)
+        ttk.Button(left,text='Crear perfil',command=self._create_profile).pack(fill='x',pady=5)
+        ttk.Button(left,text='Activar perfil seleccionado',command=self._activate_list_profile).pack(fill='x',pady=5)
+        ttk.Button(left,text='Importar proyecto v14 existente',command=self._import_legacy_project).pack(fill='x',pady=5)
+        right=ttk.Frame(tab);right.grid(row=0,column=1,sticky='nsew',padx=4)
+        right.columnconfigure(0,weight=1)
+        classes=ttk.LabelFrame(right,text='Clases del perfil activo',padding=10)
+        classes.grid(row=0,column=0,sticky='ew',pady=5)
+        self.profile_info=tk.StringVar(value='')
+        ttk.Label(classes,textvariable=self.profile_info,wraplength=670).pack(anchor='w',pady=5)
+        self.classes_list=tk.Listbox(classes,exportselection=False,height=7)
+        self.classes_list.pack(fill='x',pady=5)
+        row=ttk.Frame(classes);row.pack(fill='x',pady=4)
+        ttk.Button(row,text='Agregar clase',command=self._add_class).pack(side='left',padx=3)
+        ttk.Button(row,text='Eliminar clase vacía',command=self._remove_class).pack(side='left',padx=3)
+        images=ttk.LabelFrame(right,text='Fotografías originales',padding=10)
+        images.grid(row=1,column=0,sticky='ew',pady=5)
+        ttk.Label(images,text='Importar imágenes desde Windows a una clase o a mezclas.').pack(anchor='w')
+        self.import_class=tk.StringVar()
+        self.import_combo=ttk.Combobox(images,textvariable=self.import_class,state='readonly',width=32)
+        self.import_combo.pack(fill='x',pady=6)
+        ttk.Button(images,text='Importar fotografías al perfil',command=self._import_images).pack(fill='x',pady=3)
+        models=ttk.LabelFrame(right,text='Autorización de modelos para producción',padding=10)
+        models.grid(row=2,column=0,sticky='ew',pady=5)
+        self.model_picker=tk.StringVar()
+        self.model_combo=ttk.Combobox(models,textvariable=self.model_picker,state='readonly')
+        self.model_combo.pack(fill='x',pady=5)
+        row=ttk.Frame(models);row.pack(fill='x')
+        ttk.Button(row,text='Actualizar modelos',command=self._refresh_profiles_tab).pack(side='left',padx=3)
+        ttk.Button(row,text='Autorizar modelo',command=self._approve_model,style='Primary.TButton').pack(side='left',padx=3)
+        ttk.Button(row,text='Revocar autorización',command=self._revoke_model).pack(side='left',padx=3)
+        users=ttk.LabelFrame(right,text='Usuarios de operación',padding=10)
+        users.grid(row=3,column=0,sticky='ew',pady=5)
+        ttk.Button(users,text='Crear cuenta de operador / ingeniero',command=self._add_user).pack(anchor='w')
+        self._refresh_profiles_tab()
+
+    def _refresh_profiles_tab(self):
+        if not hasattr(self,'profiles_list'):return
+        available=self.profiles.list_profiles()
+        self.profiles_list.delete(0,'end')
+        descriptions={'approved':'PRODUCCIÓN','validation':'VALIDACIÓN','development':'DESARROLLO'}
+        for cfg in available:
+            self.profiles_list.insert('end',f'{cfg["name"]}   ·   {descriptions.get(cfg["status"],cfg["status"])}')
+        if self.active_profile:
+            active=self.profiles.load(self.active_profile['id'])
+            self.active_profile=active
+            self.classes_list.delete(0,'end')
+            for name in active['classes']:self.classes_list.insert('end',name)
+            self.import_combo.configure(values=active['classes']+['mezclas'])
+            self.import_class.set(active['classes'][0])
+            self.profile_info.set(f'{active["name"]} · {len(active["classes"])} clases · ArUco: {active["aruco_mode"]} '
+                                  f'· Estado: {descriptions.get(active["status"],active["status"])}')
+            self._available_models=self.profiles.list_models(active['id'])
+            self.model_combo.configure(values=[str(p.relative_to(self.profiles.profile_dir(active['id']))) for p in self._available_models])
+            if self._available_models:self.model_combo.current(0)
+            else:self.model_picker.set('No hay modelos entrenados')
+        self._refresh_profile_selector()
+
+    def _profiles_item_select(self,_event=None):
+        # Selecting a list row is not activating it; use explicit button.
+        pass
+
+    def _activate_list_profile(self):
+        selected=self.profiles_list.curselection()
+        profiles=self.profiles.list_profiles()
+        if not selected or selected[0]>=len(profiles):return
+        if self.busy:
+            messagebox.showwarning('Proceso activo','Finaliza el proceso actual antes de cambiar de perfil.');return
+        if not self._resolve_dirty():return
+        self._select_profile(profiles[selected[0]]['id'])
+
+    def _import_legacy_project(self):
+        if not self.active_profile or self.busy:return
+        if self.active_profile['classes'] != ['tornillo','tuerca','rondana','tornillo_oxidado','tuerca_oxidada','rondana_oxidada']:
+            messagebox.showerror('Migración v14','Selecciona un perfil con las seis clases de Tornillería v14.');return
+        folder=filedialog.askdirectory(title='Elige la carpeta del proyecto v14 que contiene input y output')
+        if not folder:return
+        legacy=Path(folder).resolve()
+        if not (legacy/'input').is_dir() or not (legacy/'output').is_dir():
+            messagebox.showerror('Migración','La carpeta elegida debe contener input/ y output/.');return
+        current=self.profiles.profile_dir(self.active_profile['id']).resolve()
+        if legacy==current or legacy.is_relative_to(current) or current.is_relative_to(legacy):
+            messagebox.showerror('Migración','El proyecto anterior y el perfil deben estar separados.');return
+        if find_images(current/'input') or any((current/'input'/'.kounta_annotations').rglob('*.json')) or self.profiles.list_models(self.active_profile['id']):
+            messagebox.showerror('Migración','Para evitar sobrescribir datos, importa en un perfil vacío sin imágenes, anotaciones o modelos.');return
+        if not messagebox.askyesno('Importar v14','Se COPIARÁN input y output completos, incluyendo BBox, aumentaciones y modelos. No se eliminarán datos antiguos. Puede utilizar bastante espacio en disco. ¿Continuar?'):
+            return
+        def worker():
+            try:
+                import shutil
+                for item in ('input','output'):
+                    shutil.copytree(legacy/item,current/item,dirs_exist_ok=True)
+                self._emit('legacy_done',str(legacy))
+            except Exception as exc:
+                self._emit('error',f'Importación v14: {exc}')
+        self._start_worker('migration',worker)
+
+    def _create_profile(self):
+        if self.busy:
+            messagebox.showwarning('Proceso activo','Espera al proceso actual.');return
+        name=simpledialog.askstring('Nuevo perfil','Nombre del nuevo perfil:',parent=self)
+        if not name:return
+        classes=simpledialog.askstring('Clases','Clases iniciales separadas por coma (ej.: luneta_fija, luneta_movil):',parent=self)
+        if not classes:return
+        choice=simpledialog.askstring('ArUco','Modo ArUco: none / optional / required\n(none = sin ArUco; optional = opcional; required = obligatorio):',initialvalue='none',parent=self)
+        if choice is None:return
+        try:
+            cfg=self.profiles.create(name,[x.strip() for x in classes.split(',')],choice.strip().lower())
+            self._select_profile(cfg['id'])
+            self._refresh_profiles_tab()
+        except Exception as exc:messagebox.showerror('Crear perfil',str(exc))
+
+    def _add_class(self):
+        if not self.active_profile:return
+        if self.busy:
+            messagebox.showwarning('Proceso activo','Espera antes de cambiar clases.');return
+        name=simpledialog.askstring('Nueva clase','Nombre de la clase:',parent=self)
+        if not name:return
+        try:
+            self.profiles.add_class(self.active_profile['id'],name)
+            self._select_profile(self.active_profile['id'])
+        except Exception as exc:messagebox.showerror('Clase',str(exc))
+
+    def _remove_class(self):
+        if not self.active_profile:return
+        selected=self.classes_list.curselection()
+        if not selected:return
+        name=self.classes_list.get(selected[0])
+        if not messagebox.askyesno('Eliminar clase',f'¿Eliminar la clase {name}? Solo se permite si no hay datos dependientes.'):
+            return
+        try:
+            self.profiles.remove_class(self.active_profile['id'],name)
+            self._select_profile(self.active_profile['id'])
+        except Exception as exc:messagebox.showerror('Eliminar clase',str(exc))
+
+    def _import_images(self):
+        if not self.active_profile:return
+        if self.busy or not self._resolve_dirty():
+            messagebox.showwarning('Proceso activo','Termina el proceso o guarda las BBox antes de importar.')
+            return
+        paths=filedialog.askopenfilenames(title='Importar fotografías',filetypes=[('Imágenes','*.jpg *.jpeg *.png *.bmp *.webp')])
+        if not paths:return
+        try:
+            count=self.profiles.import_images(self.active_profile['id'],[Path(p) for p in paths],self.import_class.get())
+            self._refresh_images()
+            messagebox.showinfo('Importación',f'Se importaron {count} imágenes a {self.import_class.get()}.')
+        except Exception as exc:messagebox.showerror('Importación',str(exc))
+
+    def _approve_model(self):
+        if not self.active_profile:return
+        chosen=self.model_combo.current()
+        if chosen<0 or chosen>=len(self._available_models):return
+        if not messagebox.askyesno('Autorizar producción','Se aprobará esta versión del modelo para operadores. ¿Continuar?'):
+            return
+        if self.busy:
+            messagebox.showwarning('Proceso activo','Termina el proceso actual.');return
+        try:
+            self.profiles.approve(self.active_profile['id'],self._available_models[chosen])
+            self._refresh_profiles_tab()
+            messagebox.showinfo('Autorizado','El perfil ya está disponible para el operador.')
+        except Exception as exc:messagebox.showerror('Autorización',str(exc))
+
+    def _revoke_model(self):
+        if not self.active_profile:return
+        if not messagebox.askyesno('Retirar autorización','El perfil dejará de estar disponible para operadores. ¿Continuar?'):
+            return
+        self.profiles.revoke(self.active_profile['id'])
+        self._refresh_profiles_tab()
+
+    def _add_user(self):
+        username=simpledialog.askstring('Crear usuario','Usuario (mínimo 3 caracteres):',parent=self)
+        if not username:return
+        password=simpledialog.askstring('Crear usuario','Contraseña (mínimo 8 caracteres):',parent=self,show='*')
+        if password is None:return
+        role=simpledialog.askstring('Crear usuario','Rol: operator / engineer',initialvalue='operator',parent=self)
+        if role is None:return
+        try:
+            self.users.add_user(username,password,role.strip().lower())
+            messagebox.showinfo('Usuario','Cuenta creada correctamente.')
+        except Exception as exc:messagebox.showerror('Usuario',str(exc))
+
+    def _build_aruco_tab(self, tab):
+        tab.columnconfigure(0,weight=1)
+        group=ttk.LabelFrame(tab,text='Configuración por perfil — 4 marcadores ArUco',padding=15)
+        group.grid(row=0,column=0,sticky='nw',padx=10,pady=10)
+        fields=[('Distancia centro ID 0 → ID 1 (mm)','reference_width_mm'),
+                ('Distancia centro ID 0 → ID 3 (mm)','reference_height_mm'),
+                ('Lado negro del marcador (mm)','marker_size_mm'),
+                ('Error RMSE máximo (mm)','max_rmse_mm'),
+                ('Umbral de objetos (0–255)','threshold'),
+                ('Área mínima (px²)','min_area_px'),('Área máxima (px²)','max_area_px')]
+        self.aruco_vars={key:tk.StringVar() for _,key in fields}
+        ttk.Label(group,text='Uso de ArUco en este perfil').grid(row=0,column=0,sticky='w',pady=7)
+        ttk.Combobox(group,textvariable=self.aruco_mode_var,
+                     values=('none','optional','required'),state='readonly',width=22).grid(row=0,column=1,padx=7,sticky='w')
+        for i,(text,key) in enumerate(fields,1):
+            ttk.Label(group,text=text).grid(row=i,column=0,sticky='w',pady=7)
+            ttk.Entry(group,textvariable=self.aruco_vars[key],width=20).grid(row=i,column=1,sticky='w',padx=7)
+        ttk.Button(group,text='Guardar calibración del perfil',command=self._save_aruco_config,
+                   style='Primary.TButton').grid(row=len(fields)+1,column=0,columnspan=2,sticky='ew',pady=12)
+        ttk.Label(group,text='0 → 1: ancho · 0 → 3: alto · ID 2: esquina inferior derecha\n'
+                        'Con opcional: faltan marcadores → YOLO cuenta toda la foto, sin medidas.\n'
+                        'Con required: una calibración inválida bloquea la inspección.',
+                  wraplength=560).grid(row=len(fields)+2,column=0,columnspan=2,sticky='w')
+        self._load_aruco_config()
+
+    def _load_aruco_config(self):
+        if not self.active_profile or not hasattr(self,'aruco_vars'):return
+        cfg=self.profiles.load(self.active_profile['id'])
+        self.aruco_mode_var.set(cfg['aruco_mode'])
+        for key,var in self.aruco_vars.items():
+            value=cfg['aruco'].get(key)
+            var.set('' if value is None else str(value))
+
+    def _save_aruco_config(self):
+        if not self.active_profile:return
+        if self.busy:
+            messagebox.showwarning('Proceso activo','Espera a que finalice el proceso.');return
+        try:
+            cfg=self.profiles.load(self.active_profile['id'])
+            mode=self.aruco_mode_var.get()
+            if mode not in ('none','optional','required'):raise ValueError('Modo ArUco no válido.')
+            values={}
+            for key,var in self.aruco_vars.items():
+                value=var.get().strip()
+                values[key]=None if not value and key in ('reference_width_mm','reference_height_mm') else float(value)
+            if values['reference_width_mm'] is not None and values['reference_width_mm']<=0:raise ValueError('El ancho debe ser positivo.')
+            if values['reference_height_mm'] is not None and values['reference_height_mm']<=0:raise ValueError('El alto debe ser positivo.')
+            if any(values[k]<=0 for k in ('marker_size_mm','max_rmse_mm','min_area_px','max_area_px')):
+                raise ValueError('Las medidas, tolerancia y áreas deben ser positivas.')
+            if not 0<=values['threshold']<=255:raise ValueError('El umbral debe estar entre 0 y 255.')
+            if values['min_area_px']>=values['max_area_px']:raise ValueError('El área mínima debe ser menor que el área máxima.')
+            cfg['aruco_mode']=mode
+            cfg['aruco'].update(values)
+            self.profiles.save(cfg)
+            self.active_profile=cfg
+            self._refresh_profiles_tab()
+            messagebox.showinfo('Calibración','Parámetros guardados en el perfil.')
+        except Exception as exc:messagebox.showerror('Calibración',str(exc))
+
+    def _build_operator_tab(self,tab):
+        tab.columnconfigure(0,weight=7);tab.columnconfigure(1,weight=3);tab.rowconfigure(1,weight=1)
+        bar=ttk.LabelFrame(tab,text='Cámara y operación',padding=12)
+        bar.grid(row=0,column=0,columnspan=2,sticky='ew',pady=5)
+        ttk.Button(bar,text='Buscar cámaras',command=self._start_camera_scan).grid(row=0,column=0,padx=5,pady=5)
+        self.camera_combo=ttk.Combobox(bar,textvariable=self.camera_choice,state='readonly',width=42)
+        self.camera_combo.grid(row=0,column=1,columnspan=3,sticky='ew',padx=5)
+        ttk.Label(bar,text='Ancho').grid(row=0,column=4,padx=3)
+        ttk.Entry(bar,textvariable=self.camera_width,width=8).grid(row=0,column=5)
+        ttk.Label(bar,text='Alto').grid(row=0,column=6,padx=3)
+        ttk.Entry(bar,textvariable=self.camera_height,width=8).grid(row=0,column=7)
+        ttk.Label(bar,text='Modo').grid(row=1,column=0,padx=4)
+        self.test_mode_combo=ttk.Combobox(bar,textvariable=self.test_mode,values=('Combinado','Comparativo'),state='readonly',width=18)
+        self.test_mode_combo.grid(row=1,column=1,sticky='w',padx=5)
+        ttk.Button(bar,text='CAPTURAR Y ANALIZAR',style='Primary.TButton',
+                   command=lambda:self._start_capture(True)).grid(row=1,column=2,columnspan=2,sticky='ew',padx=5,pady=9)
+        ttk.Checkbutton(bar,text='Enfoque automático',variable=self.camera_autofocus).grid(row=2,column=0,columnspan=2,sticky='w',pady=5)
+        ttk.Label(bar,text='Foco manual (0–255)').grid(row=2,column=2,sticky='w')
+        ttk.Entry(bar,textvariable=self.camera_focus,width=8).grid(row=2,column=3,sticky='w')
+        ttk.Label(bar,textvariable=self.test_source,wraplength=700).grid(row=3,column=0,columnspan=8,sticky='w',pady=5)
+        bar.columnconfigure(3,weight=1)
+        show=ttk.LabelFrame(tab,text='Fotografía y detecciones',padding=8)
+        show.grid(row=1,column=0,sticky='nsew',padx=4)
+        show.columnconfigure(0,weight=1);show.rowconfigure(0,weight=1)
+        self.test_canvas=tk.Canvas(show,highlightthickness=0)
+        self.test_canvas.grid(row=0,column=0,sticky='nsew')
+        self.test_canvas.bind('<Configure>',lambda _e:self._rerender_test())
+        result=ttk.LabelFrame(tab,text='Resultados del lote',padding=10)
+        result.grid(row=1,column=1,sticky='nsew',padx=4)
+        result.columnconfigure(0,weight=1);result.rowconfigure(1,weight=1)
+        self.test_summary=tk.StringVar(value='Listo para comenzar.')
+        ttk.Label(result,textvariable=self.test_summary,font=('Segoe UI',15,'bold'),
+                  wraplength=320).grid(row=0,column=0,sticky='w',pady=7)
+        self.test_details=tk.Text(result,state='disabled',wrap='word',width=37)
+        self.test_details.grid(row=1,column=0,sticky='nsew')
+
+    def _refresh_operator_profiles(self):
+        self._refresh_profile_selector()
+        if not self.active_profile:
+            self.test_summary.set('No hay perfiles autorizados. Solicita su aprobación a ingeniería.')
 
     def _build_bbox_tab(self, tab):
         tab.columnconfigure(0, weight=2)
@@ -151,7 +694,8 @@ class KountApp(tk.Tk):
         pane = ttk.LabelFrame(right, text='Edición manual', padding=8)
         pane.grid(row=0, column=0, sticky='ew')
         ttk.Label(pane, text='Clase de la BBox').pack(anchor='w')
-        ttk.Combobox(pane, textvariable=self.bbox_class, values=CLASS_NAMES, state='readonly').pack(fill='x', pady=3)
+        self.bbox_combo = ttk.Combobox(pane, textvariable=self.bbox_class, values=CLASS_NAMES, state='readonly')
+        self.bbox_combo.pack(fill='x', pady=3)
         ttk.Label(pane, text='Modo al arrastrar').pack(anchor='w', pady=(7, 0))
         ttk.Combobox(pane, textvariable=self.draw_mode, values=['Nueva', 'Reemplazar seleccionada'],
                      state='readonly').pack(fill='x', pady=3)
@@ -307,6 +851,12 @@ class KountApp(tk.Tk):
         ttk.Button(toolbar, text='Capturar foto', command=lambda: self._start_capture(False)).grid(row=4, column=0, pady=5)
         ttk.Button(toolbar, text='Capturar y contar', command=lambda: self._start_capture(True)).grid(row=4, column=1, pady=5)
         ttk.Label(toolbar, textvariable=self.test_source, wraplength=900).grid(row=4, column=2, columnspan=6, sticky='w')
+        ttk.Checkbutton(toolbar, text='Enfoque automático',variable=self.camera_autofocus).grid(row=6,column=0,columnspan=2,sticky='w',pady=4)
+        ttk.Label(toolbar,text='Foco manual (0–255)').grid(row=6,column=2,columnspan=2)
+        ttk.Entry(toolbar,textvariable=self.camera_focus,width=7).grid(row=6,column=4,sticky='w')
+        ttk.Label(toolbar, text='Modo').grid(row=5, column=0, sticky='w', pady=4)
+        self.test_mode_combo=ttk.Combobox(toolbar, textvariable=self.test_mode, values=('Combinado','Comparativo'), state='readonly', width=20)
+        self.test_mode_combo.grid(row=5,column=1,sticky='w')
         toolbar.columnconfigure(1, weight=1)
         show = ttk.LabelFrame(tab, text='Imagen y detecciones', padding=6)
         show.grid(row=1, column=0, sticky='nsew', padx=3)
@@ -339,6 +889,8 @@ class KountApp(tk.Tk):
         return input_dir, output_dir
 
     def _choose_input(self):
+        messagebox.showinfo('Perfil','Las carpetas se administran desde la pestaña Perfiles.')
+        return
         if not self._resolve_dirty():
             return
         path = filedialog.askdirectory(title='Carpeta de imágenes originales')
@@ -347,6 +899,8 @@ class KountApp(tk.Tk):
             self._refresh_images()
 
     def _choose_output(self):
+        messagebox.showinfo('Perfil','Las carpetas se administran desde la pestaña Perfiles.')
+        return
         if not self._resolve_dirty():
             return
         path = filedialog.askdirectory(title='Carpeta output')
@@ -431,7 +985,7 @@ class KountApp(tk.Tk):
         for i, obj in enumerate(objects or []):
             try:
                 x1, y1, x2, y2 = obj['bbox_xyxy']
-                color = '#FFD53F' if i == selected else colors[CLASS_NAMES.index(obj['class_name'])]
+                color = '#FFD53F' if i == selected else colors[CLASS_NAMES.index(obj['class_name']) % len(colors)]
                 sx1, sy1 = left+x1*scale, top+y1*scale
                 sx2, sy2 = left+x2*scale, top+y2*scale
                 canvas.create_rectangle(sx1, sy1, sx2, sy2, outline=color, width=3 if i==selected else 2)
@@ -842,6 +1396,7 @@ class KountApp(tk.Tk):
             with Image.open(path) as im:
                 self.test_image = im.convert('RGB').copy()
             self.test_detections = []
+            self.test_display_image = None
             self.test_source.set(path)
             self.test_summary.set('Imagen cargada. Pulsa Contar objetos.')
             self._rerender_test()
@@ -849,30 +1404,51 @@ class KountApp(tk.Tk):
             messagebox.showerror('Imagen', str(exc))
 
     def _rerender_test(self):
-        boxes = [{'class_name': d['class_name'], 'bbox_xyxy': d['bbox_xyxy']}
-                 for d in self.test_detections if d['class_name'] in CLASS_NAMES]
-        self._render_image(self.test_canvas, self.test_image, boxes, 'test')
+        if self.test_display_image is not None:
+            self._render_image(self.test_canvas,self.test_display_image,[], 'test')
+        else:
+            boxes = [{'class_name': d['class_name'], 'bbox_xyxy': d['bbox_xyxy']}
+                     for d in self.test_detections if d['class_name'] in CLASS_NAMES]
+            self._render_image(self.test_canvas, self.test_image, boxes, 'test')
 
     def _start_test_count(self):
         if self.test_image is None:
-            messagebox.showinfo('Conteo', 'Selecciona una foto o captura una imagen de cámara.')
-            return
+            messagebox.showinfo('Conteo','Selecciona una foto o captura una imagen de cámara.');return
+        if not self.active_profile:
+            messagebox.showwarning('Perfil','Selecciona un perfil autorizado.');return
         try:
-            model = self.test_model.get().strip()
-            image = self.test_image.copy()
-            conf = float(self.test_conf.get())
-            iou = float(self.test_iou.get())
-            maxdet = int(self.test_maxdet.get())
+            cfg=dict(self.active_profile)
+            if self.role=='operator':
+                approved=cfg.get('approved_model')
+                if not approved:
+                    raise ValueError('El perfil no dispone de un modelo autorizado.')
+                model=str(self.profiles.profile_dir(cfg['id'])/approved)
+            else:
+                model=self.test_model.get().strip()
+            image=self.test_image.copy()
+            conf=float(self.test_conf.get());iou=float(self.test_iou.get());maxdet=int(self.test_maxdet.get())
+            mode='Combinado' if cfg['aruco_mode']=='none' else self.test_mode.get()
         except Exception as exc:
-            messagebox.showerror('Parámetros', str(exc)); return
-        self.test_summary.set('Detectando objetos...')
+            messagebox.showerror('Parámetros',str(exc));return
+        self.test_summary.set('Analizando fotografía...')
         def worker():
             try:
-                result = predict_image(image, model, conf=conf, iou=iou, max_det=maxdet)
-                self._emit('test_done', result)
+                calibration = aruco_core.analyze(image,cfg['aruco']) if cfg['aruco_mode']!='none' else None
+                if calibration is not None and cfg['aruco_mode']=='required' and not calibration['valid']:
+                    result={'detections':[],'counts':{},'total':0,'preview':calibration['preview'],
+                            'calibration':{'detected':calibration['detected'],'valid':False,
+                                           'reason':calibration['reason'],'rmse_mm':calibration['rmse_mm']},
+                            'blocked':True,'contour_count':None}
+                else:
+                    result=predict_image(image,model,conf=conf,iou=iou,max_det=maxdet)
+                    if calibration is not None:
+                        result=aruco_core.combine(image,result,calibration,compare=(mode=='Comparativo'))
+                        if mode=='Comparativo' and not calibration['valid']:
+                            result['comparison_unavailable']=True
+                self._emit('test_done',result)
             except Exception as exc:
-                self._emit('error', f'Conteo: {exc}')
-        self._start_worker('test', worker)
+                self._emit('error',f'Identificación: {exc}')
+        self._start_worker('test',worker)
 
     def _start_camera_scan(self):
         self.camera_choice.set('Buscando cámaras...')
@@ -892,11 +1468,13 @@ class KountApp(tk.Tk):
         try:
             index = self.available_cameras[selection]['index']
             width, height = int(self.camera_width.get()), int(self.camera_height.get())
+            autofocus=self.camera_autofocus.get(); focus=int(self.camera_focus.get())
+            if not 0<=focus<=255: raise ValueError('Foco manual entre 0 y 255.')
         except Exception as exc:
             messagebox.showerror('Cámaras', str(exc)); return
         def worker():
             try:
-                img = capture_camera(index, width, height)
+                img = capture_camera(index, width, height, autofocus=autofocus, manual_focus=focus)
                 self._emit('capture_done', (img, index, count_after))
             except Exception as exc:
                 self._emit('error', f'Cámara: {exc}')
@@ -928,8 +1506,14 @@ class KountApp(tk.Tk):
                     self.busy.discard(data)
                 elif event == 'error':
                     self.status_var.set(data)
-                    self._append_train_log('ERROR: ' + data)
+                    if hasattr(self,'train_log') and self.train_log.winfo_exists():
+                        self._append_train_log('ERROR: ' + data)
                     messagebox.showerror('Kount-A', data)
+                elif event == 'legacy_done':
+                    if self.role=='engineer':
+                        self._refresh_images()
+                        self._refresh_profiles_tab()
+                    messagebox.showinfo('Importación v14','Copia completada. Revisa tus imágenes, BBox y modelos antes de entrenar.')
                 elif event == 'aug_progress':
                     self.aug_progress.configure(value=100 * data['done'] / max(1, data['total']))
                     self.aug_summary.set(f'{data["done"]}/{data["total"]} originales · {data["created"]} aumentadas')
@@ -994,19 +1578,42 @@ class KountApp(tk.Tk):
                     self._append_train_log(line)
                     self.train_state.set(line)
                 elif event == 'train_done':
+                    if self.active_profile and self.active_profile['status']!='approved':
+                        cfg=self.profiles.load(self.active_profile['id'])
+                        cfg['status']='validation'
+                        self.profiles.save(cfg)
+                        self.active_profile=cfg
                     self.last_trained = data['best_model']
                     self.train_progress.configure(value=100)
                     self.train_state.set(f'Modelo listo: {data["best_model"]}')
                     self._append_train_log('Entrenamiento completo. best.pt = ' + data['best_model'])
                     self._copy_latest_model()
+                    if self.role=='engineer':self._refresh_profiles_tab()
                 elif event == 'test_done':
                     self.test_detections = data['detections']
+                    self.test_display_image = data.get('preview')
                     self._rerender_test()
-                    self.test_summary.set(f'Total: {data["total"]}')
+                    self.test_summary.set('Inspección bloqueada' if data.get('blocked') else f'Total: {data["total"]}')
                     lines = ['CONTEO POR CLASE:']
+                    if data.get('contour_count') is not None:
+                        lines.extend(['',f'Conteo por contornos OpenCV: {data["contour_count"]}',
+                                      f'Diferencia YOLO - OpenCV: {data["total"]-data["contour_count"]}'])
+                    if 'calibration' in data:
+                        cal=data['calibration']
+                        lines.insert(0,f'ArUco: {cal["detected"]}/4 · '+('VÁLIDO' if cal['valid'] else 'SIN CALIBRACIÓN'))
+                        lines.insert(1,cal['reason'])
+                        if not cal['valid']:
+                            lines.insert(2,'SIN MEDIDAS: cuando ArUco es opcional, YOLO cuenta la imagen completa.')
+                    if data.get('comparison_unavailable'):
+                        lines.append('Comparación deshabilitada: calibración ArUco no válida.')
+                    if data.get('blocked'):
+                        lines=['INSPECCIÓN BLOQUEADA: '+data['calibration']['reason']]
+
                     lines += [f'{cls}: {count}' for cls, count in sorted(data['counts'].items())]
                     lines += ['', 'DETECCIONES:']
-                    lines += [f'{i+1}. {d["class_name"]}: {d["score"]*100:.1f}%\n   BBox {d["bbox_xyxy"]}'
+                    lines += [f'{i+1}. {d["class_name"]}: {d["score"]*100:.1f}%\n   BBox {d["bbox_xyxy"]}' +
+                              (f'\n   Largo {d["length_mm"]:.1f} mm · Ancho {d["width_mm"]:.1f} mm'
+                               if d.get('length_mm') is not None else '')
                               for i, d in enumerate(data['detections'])]
                     if not data['detections']:
                         lines.append('No hubo objetos sobre la confianza mínima.')
@@ -1023,6 +1630,7 @@ class KountApp(tk.Tk):
                     image, index, count_after = data
                     self.test_image = image
                     self.test_detections = []
+                    self.test_display_image = None
                     self.test_source.set(f'Cámara seleccionada · dispositivo {index} · {image.width}×{image.height}')
                     self.test_summary.set('Frame capturado.')
                     self._rerender_test()
@@ -1044,8 +1652,9 @@ class KountApp(tk.Tk):
             return
         try:
             obj = json.loads(self.session_path.read_text(encoding='utf-8'))
-            self.input_var.set(obj.get('input', ''))
-            self.output_var.set(obj.get('output', ''))
+            profile_id=obj.get('active_profile')
+            if profile_id and profile_id in [p['id'] for p in self.profiles.list_profiles()]:
+                self._select_profile(profile_id)
             for key, value in obj.get('settings', {}).items():
                 var = getattr(self, key, None)
                 if isinstance(var, (tk.StringVar, tk.BooleanVar)):
@@ -1062,10 +1671,11 @@ class KountApp(tk.Tk):
             'train_base', 'train_epochs', 'train_batch', 'train_imgsz',
             'train_lr', 'train_patience', 'train_seed', 'train_val', 'train_test',
             'train_aug', 'train_mosaic', 'test_model', 'prelabel_model', 'gray_threshold',
-            'gray_min_area', 'test_conf', 'test_iou', 'test_maxdet',
+            'gray_min_area', 'test_conf', 'test_iou', 'test_maxdet', 'test_mode',
+            'camera_width','camera_height','camera_autofocus','camera_focus',
         ]
-        payload = {'input': self.input_var.get(), 'output': self.output_var.get(),
-                   'settings': {name: getattr(self, name).get() for name in names}}
+        payload = {'active_profile': self.active_profile['id'] if self.active_profile else None,
+                   'settings': {name: getattr(self, name).get() for name in names if name not in ('test_model','prelabel_model')}}
         self.session_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
 
     def _on_close(self):
@@ -1075,10 +1685,10 @@ class KountApp(tk.Tk):
             '¿Deseas cerrar igualmente?'
         ):
             return
-        if not self._resolve_dirty():
+        if self.role=='engineer' and not self._resolve_dirty():
             return
         try:
-            self._save_session()
+            if self.role=='engineer': self._save_session()
         except OSError:
             pass
         self.destroy()

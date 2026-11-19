@@ -23,7 +23,8 @@ def scan_cameras(max_index: int = 7) -> list[dict]:
     return found
 
 
-def capture_camera(index: int, width: int = 1280, height: int = 720) -> Image.Image:
+def capture_camera(index: int, width: int = 1280, height: int = 720,
+                   autofocus: bool = True, manual_focus: int = 50) -> Image.Image:
     import cv2
     backend = cv2.CAP_DSHOW if os.name == 'nt' else cv2.CAP_ANY
     cap = cv2.VideoCapture(index, backend)
@@ -32,6 +33,9 @@ def capture_camera(index: int, width: int = 1280, height: int = 720) -> Image.Im
             raise RuntimeError(f'No se pudo abrir la cámara seleccionada (dispositivo {index}).')
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(width))
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(height))
+        cap.set(cv2.CAP_PROP_AUTOFOCUS, 1 if autofocus else 0)
+        if not autofocus:
+            cap.set(cv2.CAP_PROP_FOCUS, max(0, min(255, int(manual_focus))))
         last = None
         for _ in range(5):
             ok, frame = cap.read()

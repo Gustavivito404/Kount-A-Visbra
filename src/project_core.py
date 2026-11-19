@@ -16,6 +16,13 @@ CLASS_NAMES = [
 ANNOTATION_FOLDER = '.kounta_annotations'
 
 
+def set_active_classes(names: list[str]) -> None:
+    """Mutate shared list in place so existing v14 modules see active profile classes."""
+    if not names or len(names) != len(set(names)):
+        raise ValueError('Clases del perfil inválidas.')
+    CLASS_NAMES[:] = list(names)
+
+
 def normalized_class(value: str) -> str | None:
     value = unicodedata.normalize('NFKD', str(value)).encode('ascii', 'ignore').decode().lower()
     value = re.sub(r'[^a-z0-9]+', '_', value).strip('_')
@@ -27,7 +34,8 @@ def normalized_class(value: str) -> str | None:
         'tornillo_oxidada': 'tornillo_oxidado', 'tuerca_oxidado': 'tuerca_oxidada',
         'rondana_oxidado': 'rondana_oxidada',
     }
-    value = aliases.get(value, value)
+    if value not in CLASS_NAMES:
+        value = aliases.get(value, value)
     return value if value in CLASS_NAMES else None
 
 
