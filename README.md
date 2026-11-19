@@ -1,14 +1,14 @@
-# Visbra / Kount-A — v3.16.1
+# Visbra / Kount-A — v3.16.2
 
 **Reconstrucción documental de la entrega histórica de Visbra.**
 
-- **Etiqueta técnica:** `v3.16.1`
+- **Etiqueta técnica:** `v3.16.2`
 - **Etapa:** 3 de 3
 - **Versión original del proyecto:** 16
-- **Revisión documentada:** 1
-- **Cambio principal:** Ajustes de conexión y comprobación TCP con ESP32.
-- **Procedencia:** `KountA_v16_ajuste_conexion_ESP32_solo_archivos.zip`
-- **Nota:** Se superponen solo los archivos especificados en el ZIP de parche.
+- **Revisión documentada:** 2
+- **Cambio principal:** Pausa de 3 segundos entre instrucciones de trabajo.
+- **Procedencia:** `KountA_v16_pausa_3s_solo_sequence_ui.zip`
+- **Nota:** Parche específico del ejecutor de secuencias.
 
 La numeración de GitHub es una convención documental personalizada, **no implica compatibilidad con versionado semántico estándar**. Los commits y las etiquetas fueron reconstruidos a partir de archivos proporcionados y **no representan fechas originales de desarrollo**.
 

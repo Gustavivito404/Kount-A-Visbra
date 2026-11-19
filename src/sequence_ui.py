@@ -11,6 +11,11 @@ from .esp32_link import ESP32Link
 from .sequence_core import SequenceStore, validate_step, describe, KIND_LABELS
 
 
+# Pausa adicional entre instrucciones consecutivas de una misma secuencia.
+# No modifica la duración individual de los movimientos.
+PAUSA_ENTRE_INSTRUCCIONES_S = 3.0
+
+
 class SequenceUIMixin:
     def _esp_init_ui_state(self):
         self.esp_connection_text = tk.StringVar(value='ESP32: sin comprobar')
@@ -423,6 +428,14 @@ class SequenceUIMixin:
                         link.rgb(*(step['rgb'] if step['action'] == 'on' else (0, 0, 0)))
                     else:
                         self._sequence_run_camera(step, model)
+                    # Esperar entre filas, también si la anterior fue LED o cámara.
+                    # La pausa se puede interrumpir con «Detener ejecución».
+                    if i < len(steps):
+                        self._emit('sequence_progress',
+                                   f'Paso {i}/{len(steps)} completado · '
+                                   f'Pausa de {PAUSA_ENTRE_INSTRUCCIONES_S:g} s antes del siguiente…')
+                        if self._sequence_stop_event.wait(PAUSA_ENTRE_INSTRUCCIONES_S):
+                            raise InterruptedError('Secuencia detenida durante la pausa.')
                 self._emit('sequence_complete', 'Secuencia completada.')
             except InterruptedError as exc:
                 self._emit('sequence_complete', str(exc))
