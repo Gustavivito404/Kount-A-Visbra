@@ -28,12 +28,10 @@ El proyecto pertenece a su equipo desarrollador. La publicación pública no con
 ### Documentación técnica
 
 - [Resumen de los tres avances](docs/historial/AVANCES.md)
-- [Redacción ampliada para el capítulo 3](docs/capitulo3/TEXTO_TESINA_CAPITULO_3.tex)
 - [Diagrama de flujo integral (PDF)](docs/diagramas/01_flujo_integral_KountA_v16.pdf)
 - [Diagrama UML de clases (PDF)](docs/diagramas/02_uml_clases_Visbra_v16.pdf)
 - [Versiones y trazabilidad](docs/historial/VERSIONES_Y_TRAZABILIDAD.md)
 - [Historial de cambios](docs/historial/CHANGELOG.md)
-- [Texto para capítulo 3 en LaTeX](docs/historial/TEXTO_TESINA_CAPITULO_3.tex)
 - [Auditoría de rutas y privacidad](docs/historial/AUDITORIA_RUTAS_Y_PRIVACIDAD.md)
 
 **Estado de publicación:** `historial-visbra` es la rama predeterminada y conserva el código y la documentación actuales. Las 19 etiquetas permiten consultar versiones históricas independientes; no se reescribieron. La antigua rama `main` permanece como respaldo de la documentación inicial, sin ser necesaria para utilizar el programa. Los cambios de documentación posteriores a `v3.16.4` no alteran aquella etiqueta.
