@@ -343,6 +343,7 @@ class KountApp(SequenceUIMixin, LiveUIMixin, tk.Tk):
         self.aruco_mode_var = tk.StringVar(value='optional')
         self.esp32_ip = tk.StringVar(value='192.168.4.1')
         self.esp32_port = tk.StringVar(value='8080')
+        self._esp_init_ui_state()
         self.sequence_run_state = tk.StringVar(value='Sin secuencia en ejecución.')
         self.interface_scale = tk.StringVar(value=self.saved_interface_scale)
 
@@ -1275,6 +1276,11 @@ class KountApp(SequenceUIMixin, LiveUIMixin, tk.Tk):
         row+=1
         ttk.Separator(controls,orient='horizontal').grid(row=row,column=0,columnspan=2,sticky='ew',pady=5)
         row+=1
+        self._esp_status_widget(controls).grid(row=row,column=0,columnspan=2,sticky='ew',pady=(2, 2))
+        row+=1
+        ttk.Button(controls,text='Conectar ESP32',command=self._esp_connect).grid(
+            row=row,column=0,columnspan=2,sticky='ew',pady=(0,4))
+        row+=1
         self.sequence_run_state.set('Sin secuencia en ejecución.')
         ttk.Label(controls,text='Secuencia programada',font=('Segoe UI',10,'bold')).grid(
                   row=row,column=0,columnspan=2,sticky='w',pady=2)
@@ -2188,7 +2194,9 @@ class KountApp(SequenceUIMixin, LiveUIMixin, tk.Tk):
                     event, data = self.message_queue.get_nowait()
                 except queue.Empty:
                     break
-                if event == 'sequence_progress':
+                if event == 'esp_probe_result':
+                    self._esp_receive_probe_result(data)
+                elif event == 'sequence_progress':
                     self.sequence_run_state.set(data)
                 elif event == 'sequence_manual':
                     self.sequence_continue_btn.grid()
@@ -2207,9 +2215,12 @@ class KountApp(SequenceUIMixin, LiveUIMixin, tk.Tk):
                 elif event == 'sequence_complete':
                     self.sequence_run_state.set(data)
                 elif event == 'sequence_error':
+                    if 'ESP32' in data or 'comunicar' in data.lower() or 'socket' in data.lower():
+                        self._esp_update_indicator(False, 'ESP32: sin conexión')
                     self.sequence_run_state.set('Error: '+data)
                     messagebox.showerror('Secuencia',data)
                 elif event == 'sequence_safety_error':
+                    self._esp_update_indicator(False, 'ESP32: sin conexión')
                     self.sequence_run_state.set('No se pudo confirmar parada ESP32: '+data)
                     messagebox.showwarning('Parada de seguridad',
                         'No se pudo confirmar la parada por Wi-Fi. Verifica físicamente los motores.\n'+data)

@@ -27,6 +27,24 @@ class ESP32Link:
             raise RuntimeError(f'ESP32 rechazó «{command}»: {response or "sin respuesta"}')
         return response
 
+    def probe(self) -> bool:
+        """Comprueba que el firmware ESP32 responda sin activar motores ni LED.
+
+        El firmware actual responde ERROR al comando desconocido PING.
+        No hay una conexión TCP persistente: cada comando usa un socket nuevo.
+        """
+        try:
+            with socket.create_connection((self.host, self.port), timeout=self.timeout) as conn:
+                conn.settimeout(self.timeout)
+                conn.sendall(b'PING\n')
+                answer = conn.recv(256).decode('utf-8', errors='replace').strip()
+        except (OSError, TimeoutError) as exc:
+            raise ConnectionError(f'ESP32 sin respuesta ({self.host}:{self.port}): {exc}') from exc
+        if answer not in ('ERROR', 'OK', 'PONG'):
+            raise ConnectionError('Respuesta de comprobación ESP32 no reconocida: '
+                                  + (answer or '(vacía)'))
+        return True
+
     def motor(self, motor: int, direction: int, pwm: int, duration: float) -> str:
         if motor not in (1, 2) or direction not in (1, 2):
             raise ValueError('Motor/dirección inválidos.')

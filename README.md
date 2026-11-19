@@ -1,14 +1,14 @@
-# Visbra / Kount-A — v3.16.0
+# Visbra / Kount-A — v3.16.1
 
 **Reconstrucción documental de la entrega histórica de Visbra.**
 
-- **Etiqueta técnica:** `v3.16.0`
+- **Etiqueta técnica:** `v3.16.1`
 - **Etapa:** 3 de 3
 - **Versión original del proyecto:** 16
-- **Revisión documentada:** 0
-- **Cambio principal:** Primer sistema v16: cámara en vivo, secuencias programables y comunicación ESP32.
-- **Procedencia:** `KountA_YOLO_v16.zip`
-- **Nota:** ZIP de entrega inicial de v16.
+- **Revisión documentada:** 1
+- **Cambio principal:** Ajustes de conexión y comprobación TCP con ESP32.
+- **Procedencia:** `KountA_v16_ajuste_conexion_ESP32_solo_archivos.zip`
+- **Nota:** Se superponen solo los archivos especificados en el ZIP de parche.
 
 La numeración de GitHub es una convención documental personalizada, **no implica compatibilidad con versionado semántico estándar**. Los commits y las etiquetas fueron reconstruidos a partir de archivos proporcionados y **no representan fechas originales de desarrollo**.
 

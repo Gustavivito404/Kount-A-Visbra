@@ -12,6 +12,100 @@ from .sequence_core import SequenceStore, validate_step, describe, KIND_LABELS
 
 
 class SequenceUIMixin:
+    def _esp_init_ui_state(self):
+        self.esp_connection_text = tk.StringVar(value='ESP32: sin comprobar')
+        self._esp_lamps = []
+        self._esp_connected = False
+        self._esp_confirmed_endpoint = None
+        self._esp_probe_revision = 0
+        self._esp_probe_pending = False
+        self._esp_monitoring = False
+        self.esp32_ip.trace_add('write', self._esp_endpoint_changed)
+        self.esp32_port.trace_add('write', self._esp_endpoint_changed)
+
+    def _esp_endpoint_changed(self, *_):
+        self._esp_probe_revision += 1
+        self._esp_monitoring = False
+        self._esp_probe_pending = False
+        self._esp_update_indicator(False, 'ESP32: sin comprobar')
+
+    def _esp_update_indicator(self, connected, message):
+        self._esp_connected = bool(connected)
+        self._esp_confirmed_endpoint = self._esp_endpoint() if connected else None
+        self.esp_connection_text.set(message)
+        color = '#24B85A' if connected else '#D94343'
+        active = []
+        for lamp in self._esp_lamps:
+            try:
+                if lamp.winfo_exists():
+                    lamp.configure(bg=color)
+                    active.append(lamp)
+            except tk.TclError:
+                pass
+        self._esp_lamps = active
+
+    def _esp_status_widget(self, parent):
+        frame = ttk.Frame(parent)
+        lamp = tk.Frame(frame, width=22, height=16,
+                        bg='#24B85A' if self._esp_connected else '#D94343',
+                        highlightthickness=1, highlightbackground='#555555')
+        lamp.pack(side='left', padx=(0, 7))
+        lamp.pack_propagate(False)
+        ttk.Label(frame, textvariable=self.esp_connection_text,
+                  wraplength=200).pack(side='left', fill='x', expand=True)
+        self._esp_lamps.append(lamp)
+        return frame
+
+    def _esp_endpoint(self):
+        try:
+            address = self.esp32_ip.get().strip()
+            port = int(self.esp32_port.get())
+            if not address or not 0 < port < 65536:
+                return None
+            return (address, port)
+        except ValueError:
+            return None
+
+    def _esp_connect(self):
+        self._esp_monitoring = True
+        self._esp_probe(manual=True)
+
+    def _esp_probe(self, manual=False):
+        endpoint = self._esp_endpoint()
+        if endpoint is None:
+            self._esp_monitoring = False
+            self._esp_update_indicator(False, 'ESP32: IP o puerto inválido')
+            return
+        if self._esp_probe_pending:
+            return
+        self._esp_probe_pending = True
+        revision = self._esp_probe_revision
+        if manual:
+            self._esp_update_indicator(False, 'ESP32: comprobando…')
+        def worker():
+            try:
+                ESP32Link(*endpoint, timeout=2.5).probe()
+                self._emit('esp_probe_result', (revision, endpoint, True, ''))
+            except Exception as exc:
+                self._emit('esp_probe_result', (revision, endpoint, False, str(exc)))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _esp_receive_probe_result(self, data):
+        revision, endpoint, ok, error = data
+        if revision != self._esp_probe_revision or endpoint != self._esp_endpoint():
+            return
+        self._esp_probe_pending = False
+        self._esp_update_indicator(ok, 'ESP32: conectada' if ok else 'ESP32: sin conexión')
+        if error:
+            self.status_var.set(error)
+        if self._esp_monitoring:
+            # Los comandos del firmware usan sockets breves: comprobar periódicamente.
+            self.after(4500, self._esp_periodic_probe)
+
+    def _esp_periodic_probe(self):
+        if self._esp_monitoring and self.winfo_exists():
+            self._esp_probe()
+
     def _sequence_store(self):
         return SequenceStore(self.profiles.profile_dir(self.active_profile['id']))
 
@@ -53,6 +147,13 @@ class SequenceUIMixin:
         ttk.Label(sidebar, text='Perfil activo:', wraplength=140).pack(anchor='w')
         self.sequence_profile_label = ttk.Label(sidebar, text=self.active_profile['name'] if self.active_profile else 'Sin perfil', wraplength=140)
         self.sequence_profile_label.pack(anchor='w', pady=(3, 9))
+        ttk.Label(sidebar, text='Conexión ESP32').pack(anchor='w', pady=(3, 2))
+        ttk.Label(sidebar, text='IP:').pack(anchor='w')
+        ttk.Entry(sidebar, textvariable=self.esp32_ip, width=17).pack(fill='x', pady=(0, 3))
+        ttk.Label(sidebar, text='Puerto:').pack(anchor='w')
+        ttk.Entry(sidebar, textvariable=self.esp32_port, width=10).pack(fill='x', pady=(0, 5))
+        self._esp_status_widget(sidebar).pack(fill='x', pady=(2, 5))
+        ttk.Button(sidebar, text='Conectar ESP32', command=self._esp_connect).pack(fill='x', pady=4)
         ttk.Button(sidebar, text='Probar secuencia', command=self._start_sequence).pack(fill='x', pady=4)
         ttk.Button(sidebar, text='Detener ejecución', command=self._stop_sequence).pack(fill='x', pady=4)
         main = ttk.LabelFrame(tab, text='Instrucciones en orden de ejecución', padding=8)
@@ -267,6 +368,12 @@ class SequenceUIMixin:
             messagebox.showwarning('Secuencia', 'Este perfil aún no tiene una secuencia guardada.'); return
         if self.busy:
             messagebox.showwarning('Proceso activo', 'Finaliza las otras operaciones antes de iniciar una secuencia.'); return
+        if any(s['type'] in ('motor', 'led') for s in steps):
+            if not self._esp_connected or self._esp_confirmed_endpoint != self._esp_endpoint():
+                messagebox.showwarning('ESP32 sin conexión',
+                    'Antes de ejecutar motores o iluminación, pulsa «Conectar ESP32» '
+                    'y comprueba que el indicador esté verde.')
+                return
         try:
             address = self.esp32_ip.get().strip()
             port = int(self.esp32_port.get())
