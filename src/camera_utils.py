@@ -8,6 +8,15 @@ def scan_cameras(max_index: int = 7) -> list[dict]:
     import cv2
     backend = cv2.CAP_DSHOW if os.name == 'nt' else cv2.CAP_ANY
     found = []
+    device_names = []
+    if os.name == 'nt':
+        try:
+            # DirectShow names, same backend used by cv2.CAP_DSHOW.
+            # Device indices may still differ on some drivers; verify the preview.
+            from pygrabber.dshow_graph import FilterGraph
+            device_names = FilterGraph().get_input_devices()
+        except Exception:
+            pass
     for index in range(max_index + 1):
         cap = cv2.VideoCapture(index, backend)
         try:
@@ -17,7 +26,9 @@ def scan_cameras(max_index: int = 7) -> list[dict]:
             if not ok or frame is None:
                 continue
             height, width = frame.shape[:2]
-            found.append({'index': index, 'label': f'Cámara {len(found)+1} · {width}×{height} (dispositivo {index})'})
+            name = device_names[index] if index < len(device_names) else f'Cámara {index}'
+            found.append({'index': index, 'name': name,
+                          'label': f'{name} · {width}×{height} (dispositivo {index})'})
         finally:
             cap.release()
     return found

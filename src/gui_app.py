@@ -2,9 +2,10 @@ from __future__ import annotations
 import json
 import queue
 import threading
+import time
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
+from tkinter import ttk, filedialog, messagebox, simpledialog, font as tkfont
 
 from PIL import Image, ImageTk
 
@@ -16,21 +17,24 @@ from .project_core import (
 from .augment_core import generate_augmentations
 from .yolo_core import train_yolo, predict_image, export_yolo_dataset
 from .camera_utils import scan_cameras, capture_camera
+from .live_camera import LiveCamera
+from .sequence_ui import SequenceUIMixin
+from .live_ui import LiveUIMixin
 from .profile_store import ProfileManager
 from .auth_store import UserStore
 from . import aruco_core
 from .project_core import set_active_classes
 
 
-class KountApp(tk.Tk):
+class KountApp(SequenceUIMixin, LiveUIMixin, tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('Kount-A v15 | Plataforma de inspección')
+        self.title('Kount-A | Plataforma de inspección')
         # Fit the initial window inside smaller laptop screens while retaining the v15 layout.
         available_w = self.winfo_screenwidth()
         available_h = self.winfo_screenheight()
-        self.geometry(f'{min(1500, max(930, available_w-60))}x{min(900, max(600, available_h-85))}')
-        self.minsize(930, 600)
+        self.geometry(f'{min(1500, max(700, available_w-60))}x{min(900, max(500, available_h-85))}')
+        self.minsize(min(930, max(640, available_w-50)), min(600, max(450, available_h-65)))
         self.project_root = Path(__file__).resolve().parent.parent
         self.profiles = ProfileManager(self.project_root)
         self.users = UserStore(self.project_root)
@@ -46,8 +50,11 @@ class KountApp(tk.Tk):
         self.view_mode = 'engineer'  # owner may switch to operator view without changing credentials
         self.theme_file = self.project_root / 'config' / 'appearance.json'
         self.theme_name = 'dark'
+        self.saved_interface_scale = '100 %'
         try:
-            self.theme_name = json.loads(self.theme_file.read_text(encoding='utf-8')).get('theme','dark')
+            prefs=json.loads(self.theme_file.read_text(encoding='utf-8'))
+            self.theme_name = prefs.get('theme','dark')
+            self.saved_interface_scale = prefs.get('scale','100 %')
         except (OSError, ValueError):
             pass
         self.role = None
@@ -80,10 +87,34 @@ class KountApp(tk.Tk):
         self.available_cameras = []
         self._mouse_start = None
         self._rubber_id = None
+        # v16: cámara compartida, secuencias por perfil, inferencia sin bloquear Tk.
+        self._camera_stream = LiveCamera()
+        self._camera_context = None
+        self._last_camera_frame_id = -1
+        self._reported_cam_error = None
+        self._aruco_processing = False
+        self._last_aruco_at = 0
+        self._live_generation = 0
+        self._live_infer_stop = threading.Event()
+        self._live_infer_thread = None
+        self._sequence_running = False
+        self._sequence_stop_event = threading.Event()
+        self._sequence_manual_event = threading.Event()
+        self.sequence_steps = []
+        self.sequence_dirty = False
+        self._sequence_count_config = (.5, .45, 300)
+        self._ui_scale_ratio=1.0
+        self._base_named_font_sizes={}
+        for font_name in tkfont.names(self):
+            try:
+                self._base_named_font_sizes[font_name]=int(tkfont.nametofont(font_name,root=self).actual('size'))
+            except tk.TclError:
+                pass
         self._configure_vars()
         self._apply_theme()
         self._build_login()
         self.after(100, self._poll_queue)
+        self.after(150, self._poll_live)
         self.protocol('WM_DELETE_WINDOW', self._on_close)
 
     def _engineering_view(self):
@@ -107,36 +138,41 @@ class KountApp(tk.Tk):
         self.configure(bg=p['bg'])
         style = ttk.Style(self)
         style.theme_use('clam')
-        style.configure('.', background=p['bg'], foreground=p['text'], font=('Segoe UI',10))
+        factor=getattr(self,'_ui_scale_ratio',1.0)
+        fs=max(8,round(10*factor))
+        def pads(x,y): return (max(2,round(x*factor)),max(2,round(y*factor)))
+        style.configure('.', background=p['bg'], foreground=p['text'], font=('Segoe UI',fs))
         style.configure('TFrame', background=p['bg'])
-        style.configure('TLabel', background=p['bg'], foreground=p['text'])
+        style.configure('TLabel', background=p['bg'], foreground=p['text'], font=('Segoe UI',fs))
         style.configure('TLabelFrame', background=p['bg'], foreground=p['text'], bordercolor=p['border'])
-        style.configure('TLabelFrame.Label', background=p['bg'], foreground=p['blue'], font=('Segoe UI',10,'bold'))
-        style.configure('TButton', background=p['panel'], foreground=p['text'], padding=(9,6), bordercolor=p['border'])
+        style.configure('TLabelFrame.Label', background=p['bg'], foreground=p['blue'], font=('Segoe UI',fs,'bold'))
+        style.configure('TButton', background=p['panel'], foreground=p['text'], padding=pads(9,6), bordercolor=p['border'],font=('Segoe UI',fs))
         style.map('TButton', background=[('active',p['blue_hover']),('pressed',p['blue'])],
                   foreground=[('active','#FFFFFF')])
-        style.configure('Primary.TButton', background=p['blue'], foreground='#FFFFFF', padding=(12,7), bordercolor=p['blue'])
+        style.configure('Stop.TButton', background='#A82424', foreground='#FFFFFF', padding=pads(9,6),font=('Segoe UI',fs))
+        style.map('Stop.TButton', background=[('active','#C93131')], foreground=[('active','#FFFFFF')])
+        style.configure('Primary.TButton', background=p['blue'], foreground='#FFFFFF', padding=pads(12,7), bordercolor=p['blue'],font=('Segoe UI',fs))
         style.map('Primary.TButton', background=[('active',p['blue_hover'])])
         style.configure('TNotebook', background=p['bg'], bordercolor=p['border'])
-        style.configure('TNotebook.Tab', background=p['panel'], foreground=p['text'], padding=(13,9))
+        style.configure('TNotebook.Tab', background=p['panel'], foreground=p['text'], padding=pads(13,9),font=('Segoe UI',fs))
         style.map('TNotebook.Tab', background=[('selected',p['blue']),('active',p['blue_hover'])],
                   foreground=[('selected','#FFFFFF'),('active','#FFFFFF')])
         for name in ('TEntry','TCombobox','TSpinbox'):
             style.configure(name, fieldbackground=p['field'], foreground=p['text'],
-                            background=p['panel'], bordercolor=p['border'])
+                            background=p['panel'], bordercolor=p['border'],font=('Segoe UI',fs))
         style.map('TCombobox', fieldbackground=[('readonly',p['field'])],
                   foreground=[('readonly',p['text'])])
         style.configure('Treeview', background=p['field'], fieldbackground=p['field'],
-                        foreground=p['text'], rowheight=26)
+                        foreground=p['text'], rowheight=round(26*factor),font=('Segoe UI',fs))
         style.map('Treeview', background=[('selected',p['blue'])], foreground=[('selected','#FFFFFF')])
-        style.configure('Treeview.Heading', background=p['panel'], foreground=p['text'])
-        style.configure('TCheckbutton', background=p['bg'], foreground=p['text'])
-        style.configure('TRadiobutton', background=p['bg'], foreground=p['text'])
+        style.configure('Treeview.Heading', background=p['panel'], foreground=p['text'],font=('Segoe UI',fs,'bold'))
+        style.configure('TCheckbutton', background=p['bg'], foreground=p['text'],font=('Segoe UI',fs))
+        style.configure('TRadiobutton', background=p['bg'], foreground=p['text'],font=('Segoe UI',fs))
         style.configure('TProgressbar', background=p['blue'], troughcolor=p['panel'])
         self._recolor_tk(self)
         try:
             self.theme_file.parent.mkdir(parents=True, exist_ok=True)
-            self.theme_file.write_text(json.dumps({'theme':self.theme_name}),encoding='utf-8')
+            self.theme_file.write_text(json.dumps({'theme':self.theme_name,'scale':self.interface_scale.get() if hasattr(self,'interface_scale') else '100 %'}),encoding='utf-8')
         except OSError:
             pass
 
@@ -157,6 +193,19 @@ class KountApp(tk.Tk):
             except tk.TclError:
                 pass
             self._recolor_tk(obj)
+
+    def _set_interface_scale(self, _event=None):
+        try:
+            factor=float(self.interface_scale.get().split()[0])/100.0
+            self._ui_scale_ratio=factor
+            for name,base in self._base_named_font_sizes.items():
+                # Named Tk fonts are used by Listbox/Text and inherited widgets.
+                if base != 0:
+                    new_size=(1 if base>0 else -1)*max(7,round(abs(base)*factor))
+                    tkfont.nametofont(name,root=self).configure(size=new_size)
+            self._apply_theme()  # Apply pixel paddings and fonts to existing ttk widgets.
+        except (ValueError, tk.TclError):
+            pass
 
     def _toggle_theme(self):
         self.theme_name = 'light' if self.theme_name == 'dark' else 'dark'
@@ -241,6 +290,7 @@ class KountApp(tk.Tk):
         if self._engineering_view():
             self._load_session()
         else:
+            self._load_operational_config()
             self._refresh_operator_profiles()
         self._recolor_tk(self)
 
@@ -291,13 +341,17 @@ class KountApp(tk.Tk):
         self.test_mode = tk.StringVar(value='Combinado')
         self.active_profile_var = tk.StringVar(value='Sin perfil')
         self.aruco_mode_var = tk.StringVar(value='optional')
+        self.esp32_ip = tk.StringVar(value='192.168.4.1')
+        self.esp32_port = tk.StringVar(value='8080')
+        self.sequence_run_state = tk.StringVar(value='Sin secuencia en ejecución.')
+        self.interface_scale = tk.StringVar(value=self.saved_interface_scale)
 
     def _build_ui(self):
         self.workspace = ttk.Frame(self,padding=8)
         self.workspace.pack(fill='both',expand=True)
         bar=ttk.Frame(self.workspace)
         bar.pack(fill='x',pady=(0,6))
-        ttk.Label(bar,text='KOUNT-A  |  v15',font=('Segoe UI',16,'bold'),
+        ttk.Label(bar,text='KOUNT-A',font=('Segoe UI',16,'bold'),
                   foreground=self._palette()['blue']).pack(side='left',padx=(0,10))
         role_label={'owner':'Dueño','engineer':'Ingeniero','operator':'Operador'}[self.role]
         ttk.Label(bar,text=f'{self.username} · {role_label}').pack(side='left',padx=(0,8))
@@ -312,6 +366,13 @@ class KountApp(tk.Tk):
         self.theme_button.pack(side='right',padx=3)
         if self._engineering_view():
             ttk.Button(bar,text='Recargar imágenes',command=self._refresh_images).pack(side='right',padx=3)
+        scale_combo = ttk.Combobox(bar,textvariable=self.interface_scale,
+                                   values=('90 %','100 %','110 %','125 %','150 %'),state='readonly',width=6)
+        scale_combo.pack(side='right',padx=2)
+        ttk.Label(bar, text='Escala:').pack(side='right',padx=(5,2))
+        scale_combo.bind('<<ComboboxSelected>>',self._set_interface_scale)
+        ttk.Button(bar,text='■ Detener secuencia',command=self._stop_sequence,
+                   style='Stop.TButton').pack(side='right',padx=3)
         if self.role=='owner':
             ttk.Button(bar,text='Vista operador' if self._engineering_view() else 'Vista ingeniero',
                        command=self._toggle_owner_view).pack(side='right',padx=3)
@@ -319,22 +380,26 @@ class KountApp(tk.Tk):
         self.nb.pack(fill='both',expand=True)
         if self._engineering_view():
             names=('1 · Perfiles', '2 · BBox y etiquetado','3 · Augmentación y revisión',
-                   '4 · Entrenamiento YOLO','5 · Prueba y conteo','6 · Calibración ArUco')
+                   '4 · Entrenamiento YOLO','5 · Prueba y conteo','6 · Calibración ArUco',
+                   '7 · Secuencias de trabajo')
             if self.role=='owner':
-                names+=('7 · Usuarios',)
+                names+=('8 · Usuarios',)
             tabs=[ttk.Frame(self.nb,padding=6) for _ in names]
             for tab,name in zip(tabs,names): self.nb.add(tab,text=name)
             self._build_profiles_tab(tabs[0])
             self._build_bbox_tab(tabs[1])
             self._build_augment_tab(tabs[2])
             self._build_train_tab(tabs[3])
+            self.inspection_tab=tabs[4]
             self._build_test_tab(tabs[4])
             self._build_aruco_tab(tabs[5])
+            self._build_sequence_tab(tabs[6])
             if self.role=='owner':
-                self._build_users_tab(tabs[6])
+                self._build_users_tab(tabs[7])
         else:
             tab=ttk.Frame(self.nb,padding=6)
             self.nb.add(tab,text='Producción · Captura y análisis')
+            self.inspection_tab=tab
             self._build_operator_tab(tab)
         ttk.Label(self.workspace,textvariable=self.status_var,anchor='w').pack(fill='x',pady=(6,0))
         self._refresh_profile_selector()
@@ -342,10 +407,10 @@ class KountApp(tk.Tk):
     def _toggle_owner_view(self):
         if self.role != 'owner':
             return
-        if self.busy:
+        if self.busy or self._sequence_running:
             messagebox.showwarning('Proceso activo','Espera a que terminen los procesos.');return
         if self._engineering_view():
-            if not self._resolve_dirty():return
+            if not self._resolve_dirty() or not self._resolve_sequence_dirty():return
             self._save_session()
             self.view_mode='operator'
         else:
@@ -365,14 +430,15 @@ class KountApp(tk.Tk):
         if self._engineering_view():
             self._load_session()
         else:
+            self._load_operational_config()
             self._refresh_operator_profiles()
         self._recolor_tk(self)
 
     def _choose_profiles_root(self):
         if not self._engineering_view():return
-        if self.busy:
+        if self.busy or self._sequence_running:
             messagebox.showwarning('Proceso activo','Espera a que termine el proceso actual.');return
-        if not self._resolve_dirty():return
+        if not self._resolve_dirty() or not self._resolve_sequence_dirty():return
         selected=filedialog.askdirectory(title='Seleccionar carpeta principal de perfiles',
                                          initialdir=str(self.profiles.root),mustexist=True)
         if not selected:return
@@ -398,6 +464,7 @@ class KountApp(tk.Tk):
 
     def _clear_profile(self):
         self.active_profile=None
+        self._load_sequence()
         self.active_profile_var.set('Sin perfiles')
         self.input_var.set('')
         self.output_var.set('')
@@ -423,10 +490,11 @@ class KountApp(tk.Tk):
             self.test_summary.set('No hay perfil seleccionado.')
 
     def _logout(self):
-        if self.busy:
-            messagebox.showwarning('Proceso activo','Espera a que terminen los procesos antes de cerrar sesión.')
+        if self.busy or self._sequence_running:
+            messagebox.showwarning('Proceso activo','Espera a que termine la ejecución antes de cerrar sesión.')
             return
-        if self._engineering_view() and not self._resolve_dirty():return
+        if self._engineering_view() and (not self._resolve_dirty() or not self._resolve_sequence_dirty()):return
+        self._stop_live_preview()
         if self._engineering_view():
             try:self._save_session()
             except OSError:pass
@@ -454,18 +522,24 @@ class KountApp(tk.Tk):
         if i<0 or i>=len(self.profile_ids):return
         new=self.profile_ids[i]
         if self.active_profile and new==self.active_profile['id']:return
-        if self.busy:
+        if self.busy or self._sequence_running:
             messagebox.showwarning('Proceso activo','Espera a que finalice el proceso antes de cambiar de perfil.')
             self._refresh_profile_selector();return
-        if self._engineering_view() and not self._resolve_dirty():
+        if self._engineering_view() and (not self._resolve_dirty() or not self._resolve_sequence_dirty()):
             self._refresh_profile_selector();return
         self._select_profile(new)
 
     def _select_profile(self, profile_id, rebuild=True):
+        if self._sequence_running:
+            messagebox.showwarning('Secuencia activa','Detén la secuencia antes de cambiar de perfil.')
+            return
+        if self._camera_context:
+            self._stop_live_preview()
         cfg=self.profiles.load(profile_id)
         if not self._engineering_view() and cfg not in self.profiles.approved_profiles():
             raise ValueError('Perfil no autorizado.')
         self.active_profile=cfg
+        self._load_sequence()
         set_active_classes(cfg['classes'])
         folder=self.profiles.profile_dir(profile_id)
         self.input_var.set(str(folder/'input'))
@@ -485,6 +559,8 @@ class KountApp(tk.Tk):
         approved=cfg.get('approved_model')
         self.test_model.set(str(folder/approved) if approved else '')
         if rebuild:
+            if hasattr(self,'sequence_profile_label') and self.sequence_profile_label.winfo_exists():
+                self.sequence_profile_label.configure(text=cfg['name'])
             if self._engineering_view():
                 self.bbox_class.set(CLASS_NAMES[0])
                 self.bbox_combo.configure(values=CLASS_NAMES)
@@ -545,7 +621,7 @@ class KountApp(tk.Tk):
         if self.role=='owner':
             users=ttk.LabelFrame(right,text='Administración de usuarios',padding=10)
             users.grid(row=3,column=0,sticky='ew',pady=5)
-            ttk.Label(users,text='Gestiona cuentas y contraseñas desde 7 · Usuarios.').pack(anchor='w')
+            ttk.Label(users,text='Gestiona cuentas y contraseñas desde 8 · Usuarios.').pack(anchor='w')
         self._refresh_profiles_tab()
 
     def _refresh_profiles_tab(self):
@@ -575,12 +651,14 @@ class KountApp(tk.Tk):
         pass
 
     def _activate_list_profile(self):
+        if self._sequence_running:
+            messagebox.showwarning('Secuencia activa','Detén la secuencia antes de cambiar de perfil.');return
         selected=self.profiles_list.curselection()
         profiles=self.profiles.list_profiles()
         if not selected or selected[0]>=len(profiles):return
         if self.busy:
             messagebox.showwarning('Proceso activo','Finaliza el proceso actual antes de cambiar de perfil.');return
-        if not self._resolve_dirty():return
+        if not self._resolve_dirty() or not self._resolve_sequence_dirty():return
         self._select_profile(profiles[selected[0]]['id'])
 
     def _import_legacy_project(self):
@@ -652,7 +730,7 @@ class KountApp(tk.Tk):
         return result['value']
 
     def _create_profile(self):
-        if self.busy:
+        if self.busy or self._sequence_running:
             messagebox.showwarning('Proceso activo','Espera al proceso actual.');return
         name=simpledialog.askstring('Nuevo perfil','Nombre del nuevo perfil:',parent=self)
         if not name:return
@@ -841,9 +919,11 @@ class KountApp(tk.Tk):
         except Exception as exc:messagebox.showerror('Usuario',str(exc))
 
     def _build_aruco_tab(self, tab):
-        tab.columnconfigure(0,weight=1)
-        group=ttk.LabelFrame(tab,text='Configuración por perfil — 4 marcadores ArUco',padding=15)
-        group.grid(row=0,column=0,sticky='nw',padx=10,pady=10)
+        tab.columnconfigure(0,weight=2)
+        tab.columnconfigure(1,weight=3)
+        tab.rowconfigure(0,weight=1)
+        group=ttk.LabelFrame(tab,text='Configuración por perfil — 4 marcadores ArUco',padding=10)
+        group.grid(row=0,column=0,sticky='nsew',padx=4,pady=4)
         fields=[('Distancia centro ID 0 → ID 1 (mm)','reference_width_mm'),
                 ('Distancia centro ID 0 → ID 3 (mm)','reference_height_mm'),
                 ('Lado negro del marcador (mm)','marker_size_mm'),
@@ -863,6 +943,26 @@ class KountApp(tk.Tk):
                         'Con opcional: faltan marcadores → YOLO cuenta toda la foto, sin medidas.\n'
                         'Con required: una calibración inválida bloquea la inspección.',
                   wraplength=560).grid(row=len(fields)+2,column=0,columnspan=2,sticky='w')
+        # Vista ArUco en vivo: se comparte el único servicio de webcam.
+        viewer=ttk.LabelFrame(tab,text='Vista en tiempo real de ArUco',padding=7)
+        viewer.grid(row=0,column=1,sticky='nsew',padx=4,pady=4)
+        viewer.columnconfigure(0,weight=1)
+        viewer.rowconfigure(2,weight=1)
+        camera_controls=ttk.Frame(viewer)
+        camera_controls.grid(row=0,column=0,sticky='ew',pady=3)
+        self.aruco_camera_choice=ttk.Combobox(camera_controls,state='readonly',width=27)
+        self.aruco_camera_choice.pack(side='left',fill='x',expand=True,padx=2)
+        ttk.Button(camera_controls,text='Buscar cámaras',command=self._start_camera_scan).pack(side='left',padx=2)
+        run=ttk.Frame(viewer)
+        run.grid(row=1,column=0,sticky='ew',pady=3)
+        ttk.Button(run,text='Iniciar cámara ArUco',command=lambda:self._start_live_preview('aruco',infer=False)).pack(side='left',padx=2)
+        ttk.Button(run,text='Detener cámara',command=self._user_stop_live_preview).pack(side='left',padx=2)
+        self.aruco_canvas=tk.Canvas(viewer,highlightthickness=0)
+        self.aruco_canvas.grid(row=2,column=0,sticky='nsew',pady=5)
+        self.aruco_canvas.bind('<Configure>',lambda _e:self._render_image(
+            self.aruco_canvas,getattr(self,'_aruco_preview',None),[],'aruco_live'))
+        self.aruco_live_status=tk.StringVar(value='Inicia la cámara para comprobar los marcadores 0–3.')
+        ttk.Label(viewer,textvariable=self.aruco_live_status,wraplength=550).grid(row=3,column=0,sticky='ew',pady=4)
         self._load_aruco_config()
 
     def _load_aruco_config(self):
@@ -875,6 +975,8 @@ class KountApp(tk.Tk):
 
     def _save_aruco_config(self):
         if not self.active_profile:return
+        if self._sequence_running:
+            messagebox.showwarning('Secuencia activa','Detén la secuencia antes de cambiar calibración.');return
         if self.busy:
             messagebox.showwarning('Proceso activo','Espera a que finalice el proceso.');return
         try:
@@ -1120,8 +1222,19 @@ class KountApp(tk.Tk):
         tab.columnconfigure(1,weight=8,minsize=420)
         tab.rowconfigure(0,weight=1)
 
-        sidebar=ttk.Frame(tab)
-        sidebar.grid(row=0,column=0,sticky='nsew',padx=(1,5),pady=2)
+        sidebar_host=ttk.Frame(tab)
+        sidebar_host.grid(row=0,column=0,sticky='nsew',padx=(1,5),pady=2)
+        sidebar_host.rowconfigure(0,weight=1)
+        sidebar_host.columnconfigure(0,weight=1)
+        sidecanvas=tk.Canvas(sidebar_host,highlightthickness=0,bd=0)
+        sidecanvas.grid(row=0,column=0,sticky='nsew')
+        sidescroll=ttk.Scrollbar(sidebar_host,orient='vertical',command=sidecanvas.yview)
+        sidescroll.grid(row=0,column=1,sticky='ns')
+        sidecanvas.configure(yscrollcommand=sidescroll.set)
+        sidebar=ttk.Frame(sidecanvas)
+        sidewindow=sidecanvas.create_window((0,0),window=sidebar,anchor='nw')
+        sidecanvas.bind('<Configure>',lambda e: sidecanvas.itemconfigure(sidewindow,width=e.width))
+        sidebar.bind('<Configure>',lambda _e: sidecanvas.configure(scrollregion=sidecanvas.bbox('all')))
         sidebar.columnconfigure(0,weight=1)
         sidebar.rowconfigure(1,weight=1)
 
@@ -1152,14 +1265,42 @@ class KountApp(tk.Tk):
         ttk.Button(camera_row,text='Buscar cámaras',command=self._start_camera_scan).grid(row=0,column=1,sticky='e')
         row+=1
 
-        if operator:
-            ttk.Button(controls,text='CAPTURAR Y ANALIZAR',style='Primary.TButton',
-                       command=lambda:self._start_capture(True)).grid(row=row,column=0,columnspan=2,sticky='ew',pady=(3,5))
-        else:
-            ttk.Button(controls,text='Capturar foto',command=lambda:self._start_capture(False)).grid(row=row,column=0,sticky='ew',padx=(0,3),pady=(3,5))
-            ttk.Button(controls,text='CAPTURAR Y CONTAR',style='Primary.TButton',
-                       command=lambda:self._start_capture(True)).grid(row=row,column=1,sticky='ew',padx=(3,0),pady=(3,5))
+        ttk.Button(controls,text='Iniciar cámara en vivo',style='Primary.TButton',
+                   command=lambda:self._start_live_preview('test')).grid(row=row,column=0,sticky='ew',padx=(0,3),pady=3)
+        ttk.Button(controls,text='Detener cámara',command=self._user_stop_live_preview).grid(
+                   row=row,column=1,sticky='ew',padx=(3,0),pady=3)
         row+=1
+        ttk.Button(controls,text='Guardar distribución',command=self._save_distribution).grid(
+                   row=row,column=0,columnspan=2,sticky='ew',pady=3)
+        row+=1
+        ttk.Separator(controls,orient='horizontal').grid(row=row,column=0,columnspan=2,sticky='ew',pady=5)
+        row+=1
+        self.sequence_run_state.set('Sin secuencia en ejecución.')
+        ttk.Label(controls,text='Secuencia programada',font=('Segoe UI',10,'bold')).grid(
+                  row=row,column=0,columnspan=2,sticky='w',pady=2)
+        row+=1
+        ttk.Button(controls,text='Iniciar secuencia',command=self._start_sequence).grid(
+                   row=row,column=0,sticky='ew',padx=(0,3),pady=3)
+        ttk.Button(controls,text='Detener secuencia',command=self._stop_sequence).grid(
+                   row=row,column=1,sticky='ew',padx=(3,0),pady=3)
+        row+=1
+        self.sequence_continue_btn=ttk.Button(controls,text='CONFIRMAR Y CONTINUAR',style='Primary.TButton',
+                                              command=self._sequence_continue)
+        self.sequence_continue_btn.grid(row=row,column=0,columnspan=2,sticky='ew',pady=3)
+        self.sequence_continue_btn.grid_remove()
+        row+=1
+        ttk.Label(controls,textvariable=self.sequence_run_state,wraplength=280).grid(
+                  row=row,column=0,columnspan=2,sticky='ew',pady=2)
+        row+=1
+        if not operator:
+            endpoint=ttk.Frame(controls)
+            endpoint.grid(row=row,column=0,columnspan=2,sticky='ew',pady=3)
+            endpoint.columnconfigure(1,weight=1)
+            ttk.Label(endpoint,text='ESP32 IP:').grid(row=0,column=0,sticky='w')
+            ttk.Entry(endpoint,textvariable=self.esp32_ip,width=16).grid(row=0,column=1,sticky='ew',padx=3)
+            ttk.Label(endpoint,text='Puerto:').grid(row=0,column=2,sticky='w')
+            ttk.Entry(endpoint,textvariable=self.esp32_port,width=6).grid(row=0,column=3,sticky='e')
+            row+=1
 
         mode_row=ttk.Frame(controls)
         mode_row.grid(row=row,column=0,columnspan=2,sticky='ew',pady=(2,3))
@@ -1222,6 +1363,20 @@ class KountApp(tk.Tk):
         self.test_canvas=tk.Canvas(show,highlightthickness=0)
         self.test_canvas.grid(row=1,column=0,sticky='nsew')
         self.test_canvas.bind('<Configure>',lambda _e:self._rerender_test())
+        # Rueda del ratón desplaza los controles aun si el cursor está sobre un botón.
+        def wheel(event):
+            direction=(-1 if (getattr(event,'num',None)==4 or getattr(event,'delta',0)>0) else 1)
+            sidecanvas.yview_scroll(direction * 3,'units')
+            return 'break'
+        def bind_descendants(widget):
+            for wid in widget.winfo_children():
+                wid.bind('<MouseWheel>',wheel,add='+')
+                wid.bind('<Button-4>',wheel,add='+')
+                wid.bind('<Button-5>',wheel,add='+')
+                bind_descendants(wid)
+        bind_descendants(sidebar)
+        for event_name in ('<MouseWheel>','<Button-4>','<Button-5>'):
+            sidecanvas.bind(event_name,wheel,add='+')
 
     def _toggle_test_advanced(self):
         if self.test_advanced_frame.winfo_manager():
@@ -1781,7 +1936,7 @@ class KountApp(tk.Tk):
 
     def _can_cleanup_output(self) -> bool:
         # No borrar archivos que están siendo utilizados por otros procesos.
-        if self.busy:
+        if self.busy or self._sequence_running:
             messagebox.showwarning(
                 'Proceso en curso',
                 'Espera a que terminen la aumentación, exportación, entrenamiento o cualquier otra tarea antes de borrar archivos.')
@@ -1909,6 +2064,9 @@ class KountApp(tk.Tk):
         self.status_var.set('Modelo seleccionado en Prueba y BBox: ' + self.last_trained)
 
     def _test_open(self):
+        if self._sequence_running:
+            messagebox.showwarning('Secuencia','No abras fotografías durante una secuencia.');return
+        self._stop_live_preview()
         path = filedialog.askopenfilename(title='Imagen de prueba', filetypes=[('Imágenes', '*.png *.jpg *.jpeg *.bmp *.webp'), ('Todas', '*.*')])
         if not path:
             return
@@ -1932,6 +2090,10 @@ class KountApp(tk.Tk):
             self._render_test_into(canvas,'test_popup')
 
     def _start_test_count(self):
+        if self._sequence_running:
+            messagebox.showwarning('Conteo','La secuencia está controlando la cámara.'); return
+        if self._camera_context == 'test':
+            self._stop_live_preview()  # Congela el último fotograma para conteo definitivo.
         if self.test_image is None:
             messagebox.showinfo('Conteo','Selecciona una foto o captura una imagen de cámara.');return
         if not self.active_profile:
@@ -1971,6 +2133,9 @@ class KountApp(tk.Tk):
         self._start_worker('test',worker)
 
     def _start_camera_scan(self):
+        if self._sequence_running:
+            messagebox.showwarning('Cámaras','No busques cámaras durante una secuencia.'); return
+        self._stop_live_preview()
         self.camera_choice.set('Buscando cámaras...')
         def worker():
             try:
@@ -1981,6 +2146,7 @@ class KountApp(tk.Tk):
         self._start_worker('camera', worker)
 
     def _start_capture(self, count_after):
+        if self._sequence_running: return
         selection = self.camera_combo.current()
         if selection < 0 or selection >= len(self.available_cameras):
             messagebox.showinfo('Cámaras', 'Primero pulsa Buscar cámaras y selecciona una.')
@@ -2022,7 +2188,61 @@ class KountApp(tk.Tk):
                     event, data = self.message_queue.get_nowait()
                 except queue.Empty:
                     break
-                if event == 'worker_finished':
+                if event == 'sequence_progress':
+                    self.sequence_run_state.set(data)
+                elif event == 'sequence_manual':
+                    self.sequence_continue_btn.grid()
+                    self._camera_context='test'
+                    self._start_live_inference(data['model'])
+                    self.sequence_run_state.set('Inspección manual: revisa el lote y confirma para continuar.')
+                elif event == 'sequence_manual_end':
+                    self._stop_live_inference()
+                    self.sequence_continue_btn.grid_remove()
+                elif event == 'sequence_count':
+                    image, result = data
+                    self._stop_live_inference()
+                    self.test_image=image
+                    self._camera_context=None
+                    self._emit('test_done',result)
+                elif event == 'sequence_complete':
+                    self.sequence_run_state.set(data)
+                elif event == 'sequence_error':
+                    self.sequence_run_state.set('Error: '+data)
+                    messagebox.showerror('Secuencia',data)
+                elif event == 'sequence_safety_error':
+                    self.sequence_run_state.set('No se pudo confirmar parada ESP32: '+data)
+                    messagebox.showwarning('Parada de seguridad',
+                        'No se pudo confirmar la parada por Wi-Fi. Verifica físicamente los motores.\n'+data)
+                elif event == 'sequence_finished':
+                    self._sequence_running=False
+                    self.sequence_continue_btn.grid_remove()
+                    self._stop_live_inference()
+                    if self._camera_context == 'test': self._stop_live_preview()
+                elif event == 'live_count':
+                    gen,detections,counts,note=data
+                    if gen == self._live_generation and self._camera_context=='test':
+                        self.test_detections=detections
+                        self.test_display_image=None
+                        self.test_summary.set('En vivo · Total: '+str(len(detections)) + (' · '+note if note else ''))
+                        self._set_text(self.test_details,'CONTEO POR CLASE (EN VIVO):\n'+
+                                       '\n'.join(f'{cls}: {n}' for cls,n in sorted(counts.items())))
+                        self._rerender_test()
+                elif event == 'live_error':
+                    gen,issue=data
+                    if gen == self._live_generation:
+                        self.test_summary.set('YOLO en vivo: '+issue)
+                elif event == 'aruco_live_result':
+                    self._aruco_processing=False
+                    if self._camera_context=='aruco':
+                        self._aruco_preview=data['preview']
+                        self._render_image(self.aruco_canvas,self._aruco_preview,[],'aruco_live')
+                        self.aruco_live_status.set(f"Marcadores {data['detected']}/4 · "+
+                            ('CALIBRACIÓN VÁLIDA' if data['valid'] else data['reason'])+
+                            (f" · RMSE {data['rmse_mm']:.2f} mm" if data['rmse_mm'] is not None else ''))
+                elif event == 'aruco_live_error':
+                    self._aruco_processing=False
+                    self.aruco_live_status.set(data)
+                elif event == 'worker_finished':
                     self.busy.discard(data)
                 elif event == 'error':
                     self.status_var.set(data)
@@ -2157,6 +2377,9 @@ class KountApp(tk.Tk):
                     self.available_cameras = data
                     labels = [c['label'] for c in data]
                     self.camera_combo.configure(values=labels)
+                    if hasattr(self,'aruco_camera_choice') and self.aruco_camera_choice.winfo_exists():
+                        self.aruco_camera_choice.configure(values=labels)
+                        if labels: self.aruco_camera_choice.current(0)
                     self.camera_choice.set(labels[0] if labels else 'No se encontraron cámaras disponibles')
                     if data:
                         self.camera_combo.current(0)
@@ -2181,6 +2404,18 @@ class KountApp(tk.Tk):
         widget.insert('1.0', value)
         widget.configure(state='disabled')
 
+    def _load_operational_config(self):
+        """Load only equipment settings; never force an unapproved profile for operators."""
+        try:
+            settings=json.loads(self.session_path.read_text(encoding='utf-8')).get('settings',{})
+            for key in ('esp32_ip','esp32_port','camera_width','camera_height',
+                        'camera_autofocus','camera_focus'):
+                if key in settings:
+                    getattr(self,key).set(settings[key])
+            self._set_interface_scale()
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            pass
+
     def _load_session(self):
         if not self.session_path.is_file():
             self._refresh_images()
@@ -2194,6 +2429,7 @@ class KountApp(tk.Tk):
                 var = getattr(self, key, None)
                 if isinstance(var, (tk.StringVar, tk.BooleanVar)):
                     var.set(value)
+            self._set_interface_scale()
             self._refresh_images()
         except Exception as exc:
             self.status_var.set(f'No se pudo restaurar la sesión: {exc}')
@@ -2207,21 +2443,26 @@ class KountApp(tk.Tk):
             'train_lr', 'train_patience', 'train_seed', 'train_val', 'train_test',
             'train_aug', 'train_mosaic', 'test_model', 'prelabel_model', 'gray_threshold',
             'gray_min_area', 'bbox_editing_mode', 'prelabel_keep_existing', 'test_conf', 'test_iou', 'test_maxdet', 'test_mode',
-            'camera_width','camera_height','camera_autofocus','camera_focus',
+            'camera_width','camera_height','camera_autofocus','camera_focus','esp32_ip','esp32_port','interface_scale',
         ]
         payload = {'active_profile': self.active_profile['id'] if self.active_profile else None,
                    'settings': {name: getattr(self, name).get() for name in names if name not in ('test_model','prelabel_model')}}
         self.session_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
 
     def _on_close(self):
+        if self._sequence_running:
+            messagebox.showwarning('Secuencia en ejecución',
+                'Detén la secuencia y verifica que los motores estén apagados antes de cerrar Kount-A.')
+            return
         if self.busy and not messagebox.askyesno(
             'Procesos en marcha',
             'Hay procesos ejecutándose. Al cerrar se pueden interrumpir y perder resultados. '
             '¿Deseas cerrar igualmente?'
         ):
             return
-        if self._engineering_view() and not self._resolve_dirty():
+        if self._engineering_view() and (not self._resolve_dirty() or not self._resolve_sequence_dirty()):
             return
+        self._stop_live_preview()
         try:
             if self._engineering_view(): self._save_session()
         except OSError:

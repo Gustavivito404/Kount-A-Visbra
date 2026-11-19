@@ -1,14 +1,14 @@
-# Visbra / Kount-A — v3.15.3
+# Visbra / Kount-A — v3.16.0
 
 **Reconstrucción documental de la entrega histórica de Visbra.**
 
-- **Etiqueta técnica:** `v3.15.3`
+- **Etiqueta técnica:** `v3.16.0`
 - **Etapa:** 3 de 3
-- **Versión original del proyecto:** 15
-- **Revisión documentada:** 3
-- **Cambio principal:** Refinamientos de v15, incluida visibilidad de BBox y actualización del panel de prueba.
-- **Procedencia:** `Avance cronologico.zip`
-- **Nota:** Código final v15 del archivo cronológico; mismos bytes que v15(1).zip.
+- **Versión original del proyecto:** 16
+- **Revisión documentada:** 0
+- **Cambio principal:** Primer sistema v16: cámara en vivo, secuencias programables y comunicación ESP32.
+- **Procedencia:** `KountA_YOLO_v16.zip`
+- **Nota:** ZIP de entrega inicial de v16.
 
 La numeración de GitHub es una convención documental personalizada, **no implica compatibilidad con versionado semántico estándar**. Los commits y las etiquetas fueron reconstruidos a partir de archivos proporcionados y **no representan fechas originales de desarrollo**.
 
