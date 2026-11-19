@@ -55,6 +55,24 @@ Los siguientes diagramas presentan, de manera visual, el funcionamiento del sist
 
 Visbra integra adquisición y procesamiento de imágenes, detección y conteo mediante YOLO, referencias espaciales y dimensionales con ArUco, interfaz gráfica y comunicación con el sistema embebido del prototipo **Kount-A**.
 
+## Primera ejecución: cuenta del dueño y perfiles
+
+Al iniciar Visbra por primera vez, **no necesitas crear manualmente las carpetas ni editar archivos JSON**.
+
+1. **Instala las dependencias** desde la carpeta principal del proyecto y ejecuta la interfaz:
+
+   ```bat
+   py -m pip install -r requirements.txt
+   py -m src.gui_app
+   ```
+
+2. **Crea la cuenta del dueño.** Si todavía no hay usuarios registrados, la pantalla inicial mostrará **«Crear cuenta del dueño»**. Escribe un nombre de usuario de 3 a 32 caracteres (letras, números, `_`, `.` o `-`) y una contraseña de **al menos 8 caracteres**. La aplicación guardará la cuenta localmente en `config/users.json` con una derivación criptográfica de la contraseña, no la contraseña en texto plano.
+3. **Abre el espacio de trabajo.** Visbra crea automáticamente `profiles/` en la raíz del proyecto y, si no encuentra perfiles, genera uno inicial llamado **Tornillería**, con clases de ejemplo y carpetas de entrada, anotaciones, resultados y modelos. Este perfil comienza en estado *desarrollo*: no incluye un modelo YOLO entrenado ni queda autorizado automáticamente para producción.
+4. **Configura tus perfiles de trabajo.** Desde **1 · Perfiles** puedes crear perfiles adicionales y administrar sus clases. Si ya tienes perfiles en otra ubicación, usa **«Explorar perfiles…»** para seleccionar su carpeta; no se copiarán ni sobrescribirán automáticamente. Una carpeta externa vacía no recibe el perfil de ejemplo.
+5. **Administra usuarios y autorizaciones.** La cuenta **dueño** puede gestionar usuarios en **8 · Usuarios** y autorizar modelos para los perfiles. Los ingenieros configuran y entrenan; los operadores solo utilizan perfiles y modelos autorizados.
+
+> **Importante:** «Dueño» es un **rol de usuario**, no una clase ni un perfil de producto. No hace falta crear un «perfil del dueño». Los archivos de usuarios, perfiles, contraseñas y configuraciones locales no se incluyen en este repositorio público: se generan o configuran en tu instalación y no deben subirse a GitHub.
+
 ### Tres grandes etapas
 
 1. **Desarrollo inicial:** base de aumento de datos, bounding boxes, parámetros por clase y entrenamiento de clasificación (v4–v10).
