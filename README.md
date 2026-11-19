@@ -25,13 +25,12 @@ Consulta su `README.md` y `requirements.txt` antes de instalar. Se requiere Pyth
 El proyecto pertenece a su equipo desarrollador. La publicación pública no concede por sí misma permiso de redistribución de código ajeno. No se ha definido una licencia en este paquete de preparación.
 
 
-### Documentación técnica
+### Documentación publicada
 
-- [Diagrama de flujo integral (PDF)](docs/diagramas/01_flujo_integral_KountA_v16.pdf)
-- [Diagrama UML de clases (PDF)](docs/diagramas/02_uml_clases_Visbra_v16.pdf)
-- [Versiones y trazabilidad](docs/historial/VERSIONES_Y_TRAZABILIDAD.md)
-- [Historial de cambios](docs/historial/CHANGELOG.md)
-- [Texto para capítulo 3 en LaTeX](docs/historial/TEXTO_TESINA_CAPITULO_3.tex)
-- [Auditoría de rutas y privacidad](docs/historial/AUDITORIA_RUTAS_Y_PRIVACIDAD.md)
+- [Tres avances de desarrollo](docs/historial/AVANCES.md)
+- [Registro de cambios](docs/historial/CHANGELOG.md)
+- [Análisis inicial de las versiones](docs/historial/ANALISIS_INICIAL.md)
+- [Texto para el capítulo 3 en LaTeX](docs/capitulo3/TEXTO_TESINA_CAPITULO_3.tex)
+- [Guía para importar el historial Git y sus etiquetas](docs/historial/PUBLICACION.md)
 
-**Estado actual:** documentación en publicación. El historial reconstruido (20 commits y 19 etiquetas) está preparado en un archivo Git independiente, pero **aún no se ha importado** en el repositorio.
+**Pendiente:** transferir el historial Git completo y los archivos de diagramas vectoriales que están en el paquete preparado.
