@@ -1,2 +1,37 @@
-# Kount-A-Visbra
-En este repositorio se guardara las versiones desarrolladas para el proyecto de titulación de la carrera de ingeniería mecatrónica en el Centro de Enseñanza Técnica Industrial, la cual tiene nombre de visbra y funciona como la interfaz principal para el primer prototipo Kount Alpha o abreviado a Kount-A
+# Kount-A / Visbra
+
+## Evolución del software para inspección y conteo por visión artificial
+
+Este repositorio documenta el desarrollo incremental de **Visbra**, software que integra adquisición, etiquetado, procesamiento visual, detección mediante YOLO, referencias ArUco, interfaz HMI y comunicación con el sistema embebido del prototipo **Kount-A**.
+
+### Tres grandes etapas
+
+1. **Desarrollo inicial:** base de aumento de datos, bounding boxes, parámetros por clase y entrenamiento de clasificación (v4–v10).
+2. **Detección y entrenamiento:** detector multiobjeto, herramientas de etiquetado y transición a YOLO (v11–v14).
+3. **Integración del sistema:** gestión de perfiles, ArUco, interfaces, cámara en vivo, comunicación ESP32 y secuencias (v15–v16).
+
+### Versiones
+
+Las versiones se identifican con etiquetas del tipo `v1.4.0`, `v2.11.0` y `v3.16.4`. **El primer número indica la etapa**, el segundo corresponde al número original de Visbra y el tercero distingue una revisión puntual documentada. Esta convención es propia del proyecto, no SemVer estándar.
+
+Los commits y las etiquetas se reconstruyeron a partir de entregas ZIP y no representan fechas originales de programación. No se dispone de un paquete v7 y la designación v4 para la carpeta inicial es provisional.
+
+### Ejecutar la última entrega
+
+Consulta su `README.md` y `requirements.txt` antes de instalar. Se requiere Python y las bibliotecas de visión/IA correspondientes; para actuadores, el firmware ESP32 debe estar instalado aparte. Los conjuntos de datos, los perfiles, los modelos y las configuraciones personales no se incluyen por privacidad y tamaño.
+
+### Publicación y autoría
+
+El proyecto pertenece a su equipo desarrollador. La publicación pública no concede por sí misma permiso de redistribución de código ajeno. No se ha definido una licencia en este paquete de preparación.
+
+
+### Documentación técnica
+
+- [Diagrama de flujo integral (PDF)](docs/diagramas/01_flujo_integral_KountA_v16.pdf)
+- [Diagrama UML de clases (PDF)](docs/diagramas/02_uml_clases_Visbra_v16.pdf)
+- [Versiones y trazabilidad](docs/historial/VERSIONES_Y_TRAZABILIDAD.md)
+- [Historial de cambios](docs/historial/CHANGELOG.md)
+- [Texto para capítulo 3 en LaTeX](docs/historial/TEXTO_TESINA_CAPITULO_3.tex)
+- [Auditoría de rutas y privacidad](docs/historial/AUDITORIA_RUTAS_Y_PRIVACIDAD.md)
+
+**Estado actual:** documentación en publicación. El historial reconstruido (20 commits y 19 etiquetas) está preparado en un archivo Git independiente, pero **aún no se ha importado** en el repositorio.
