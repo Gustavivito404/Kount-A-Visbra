@@ -1,14 +1,14 @@
-# Visbra / Kount-A — v2.11.0
+# Visbra / Kount-A — v2.12.0
 
 **Reconstrucción documental de la entrega histórica de Visbra.**
 
-- **Etiqueta técnica:** `v2.11.0`
+- **Etiqueta técnica:** `v2.12.0`
 - **Etapa:** 2 de 3
-- **Versión original del proyecto:** 11
+- **Versión original del proyecto:** 12
 - **Revisión documentada:** 0
-- **Cambio principal:** Se incorpora detección de múltiples objetos y pruebas con monedas.
-- **Procedencia:** `augment_gui_project_v11`
-- **Nota:** Detección basada en código detection_core.py y README v11.
+- **Cambio principal:** Se separan entrenamiento del detector y pruebas de conteo; se añaden umbrales por RGB.
+- **Procedencia:** `augment_gui_project_v12`
+- **Nota:** README v12 y código.
 
 La numeración de GitHub es una convención documental personalizada, **no implica compatibilidad con versionado semántico estándar**. Los commits y las etiquetas fueron reconstruidos a partir de archivos proporcionados y **no representan fechas originales de desarrollo**.
 

@@ -26,13 +26,8 @@ try:
     from .bbox_utils import (
         build_preview_image,
         detect_bbox_white_background,
+        detect_bbox_configurable,
         load_bbox_metadata,
-    )
-    from .classifier_core import (
-        DEFAULT_MODEL_NAME,
-        load_checkpoint_metadata,
-        predict_image,
-        train_classifier,
     )
     from .detection_core import (
         DEFAULT_DETECTOR_MODEL_NAME,
@@ -61,13 +56,8 @@ except ImportError:
     from bbox_utils import (
         build_preview_image,
         detect_bbox_white_background,
+        detect_bbox_configurable,
         load_bbox_metadata,
-    )
-    from classifier_core import (
-        DEFAULT_MODEL_NAME,
-        load_checkpoint_metadata,
-        predict_image,
-        train_classifier,
     )
     from detection_core import (
         DEFAULT_DETECTOR_MODEL_NAME,
@@ -83,10 +73,14 @@ except ImportError:
 NOTES_TEXT = """\
 Notas de uso
 
-1. El programa trabaja suponiendo que el objeto está sobre fondo blanco o casi blanco.
+1. La obtención de bounding boxes tiene dos modos:
+   - white: usa un umbral para separar un fondo blanco.
+   - rgb_range: selecciona el objeto con rangos independientes R, G y B.
 
 2. Los parámetros globales sirven como respaldo general:
    - Seed
+   - Modo de BBox
+   - Rangos RGB
    - Umbral de blanco
    - Mínimo de pixeles del objeto
 
@@ -143,7 +137,7 @@ class NotesWindow(tk.Toplevel):
 class AugmentApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Augment Dataset + IA v11 - Pruebas por imagen")
+        self.title("Augment Dataset + Detector / Conteo v12")
         self.geometry("1420x830")
         self.minsize(1280, 760)
 
@@ -154,6 +148,15 @@ class AugmentApp(tk.Tk):
         self.threshold_var = tk.StringVar(value="245")
         self.min_fg_var = tk.StringVar(value="50")
         self.flip_var = tk.BooleanVar(value=True)
+
+        # Extracción de bounding box: modo clásico o rango RGB
+        self.detection_mode_var = tk.StringVar(value="white")
+        self.r_min_var = tk.StringVar(value="0")
+        self.r_max_var = tk.StringVar(value="240")
+        self.g_min_var = tk.StringVar(value="0")
+        self.g_max_var = tk.StringVar(value="240")
+        self.b_min_var = tk.StringVar(value="0")
+        self.b_max_var = tk.StringVar(value="240")
 
         self.class_params: dict[str, dict[str, int]] = {}
         self.current_scope_var = tk.StringVar(value="General / default")
@@ -167,21 +170,6 @@ class AugmentApp(tk.Tk):
         self.augmented_preview_photo = None
 
         self._building_scope_values = False
-
-        # Clasificador de imágenes completas (v10)
-        self.nn_epochs_var = tk.StringVar(value="20")
-        self.nn_batch_var = tk.StringVar(value="32")
-        self.nn_lr_var = tk.StringVar(value="0.001")
-        self.nn_image_size_var = tk.StringVar(value="128")
-        self.nn_val_fraction_var = tk.StringVar(value="0.20")
-        self.nn_seed_var = tk.StringVar(value="42")
-        self.nn_model_path_var = tk.StringVar()
-        self.nn_test_image_var = tk.StringVar()
-        self.nn_status_var = tk.StringVar(value="Listo para entrenar.")
-        self.nn_prediction_var = tk.StringVar(value="Sin predicción.")
-        self.nn_model_info_var = tk.StringVar(value="Sin modelo cargado.")
-        self.nn_test_preview_photo = None
-        self.nn_training = False
 
         # Detector / conteo (v11)
         self.det_epochs_var = tk.StringVar(value="10")
@@ -213,7 +201,7 @@ class AugmentApp(tk.Tk):
 
         ttk.Label(
             container,
-            text="Augment Dataset + Clasificación + Detección / Conteo v11",
+            text="Augment Dataset + Detector / Conteo v12",
             font=("Segoe UI", 12, "bold")
         ).pack(anchor="w", pady=(0, 10))
 
@@ -221,12 +209,12 @@ class AugmentApp(tk.Tk):
         self.notebook.pack(fill="both", expand=True)
 
         augment_tab = ttk.Frame(self.notebook, padding=4)
-        classifier_tab = ttk.Frame(self.notebook, padding=4)
-        detector_tab = ttk.Frame(self.notebook, padding=4)
+        training_tab = ttk.Frame(self.notebook, padding=4)
+        test_tab = ttk.Frame(self.notebook, padding=4)
 
         self.notebook.add(augment_tab, text="1. Dataset / Augmentación")
-        self.notebook.add(classifier_tab, text="2. Clasificación / Prueba")
-        self.notebook.add(detector_tab, text="3. Detección / Conteo")
+        self.notebook.add(training_tab, text="2. Entrenamiento detector")
+        self.notebook.add(test_tab, text="3. Prueba de conteo")
 
         main = ttk.Panedwindow(augment_tab, orient="horizontal")
         main.pack(fill="both", expand=True)
@@ -243,55 +231,92 @@ class AugmentApp(tk.Tk):
         self._build_center_panel(center)
         self._build_right_panel(right)
 
-        self._build_classifier_tab(classifier_tab)
-        self._build_detector_tab(detector_tab)
+        self._build_detector_training_tab(training_tab)
+        self._build_detector_test_tab(test_tab)
 
 
     def _build_left_panel(self, parent: ttk.Frame) -> None:
         form = ttk.LabelFrame(parent, text="Configuración general", padding=10)
         form.pack(fill="x")
 
-        ttk.Label(form, text="Carpeta input").grid(row=0, column=0, sticky="w", pady=5)
-        ttk.Entry(form, textvariable=self.input_dir_var, width=42).grid(row=0, column=1, sticky="ew", padx=6)
+        ttk.Label(form, text="Carpeta input").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Entry(form, textvariable=self.input_dir_var, width=40).grid(row=0, column=1, sticky="ew", padx=6)
         ttk.Button(form, text="Examinar", command=self.select_input_dir).grid(row=0, column=2)
 
-        ttk.Label(form, text="Carpeta output").grid(row=1, column=0, sticky="w", pady=5)
-        ttk.Entry(form, textvariable=self.output_dir_var, width=42).grid(row=1, column=1, sticky="ew", padx=6)
+        ttk.Label(form, text="Carpeta output").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Entry(form, textvariable=self.output_dir_var, width=40).grid(row=1, column=1, sticky="ew", padx=6)
         ttk.Button(form, text="Examinar", command=self.select_output_dir).grid(row=1, column=2)
 
-        ttk.Label(form, text="Copias por imagen").grid(row=2, column=0, sticky="w", pady=5)
+        ttk.Label(form, text="Copias por imagen").grid(row=2, column=0, sticky="w", pady=4)
         ttk.Entry(form, textvariable=self.copies_var, width=12).grid(row=2, column=1, sticky="w", padx=6)
 
-        ttk.Label(form, text="Seed").grid(row=3, column=0, sticky="w", pady=5)
+        ttk.Label(form, text="Seed").grid(row=3, column=0, sticky="w", pady=4)
         ttk.Entry(form, textvariable=self.seed_var, width=12).grid(row=3, column=1, sticky="w", padx=6)
 
-        ttk.Separator(form, orient="horizontal").grid(row=4, column=0, columnspan=3, sticky="ew", pady=8)
+        ttk.Separator(form, orient="horizontal").grid(row=4, column=0, columnspan=3, sticky="ew", pady=7)
 
-        ttk.Label(form, text="Editar umbrales de").grid(row=5, column=0, sticky="w", pady=5)
+        ttk.Label(form, text="Modo de BBox").grid(row=5, column=0, sticky="w", pady=4)
+        ttk.Combobox(
+            form,
+            textvariable=self.detection_mode_var,
+            state="readonly",
+            values=["white", "rgb_range"],
+            width=16
+        ).grid(row=5, column=1, sticky="w", padx=6)
+
+        ttk.Label(
+            form,
+            text="white: fondo blanco | rgb_range: color del objeto",
+            justify="left"
+        ).grid(row=6, column=1, columnspan=2, sticky="w", padx=6)
+
+        ttk.Label(form, text="R min / max").grid(row=7, column=0, sticky="w", pady=3)
+        r_frame = ttk.Frame(form)
+        r_frame.grid(row=7, column=1, sticky="w", padx=6)
+        ttk.Entry(r_frame, textvariable=self.r_min_var, width=6).pack(side="left")
+        ttk.Label(r_frame, text="  a  ").pack(side="left")
+        ttk.Entry(r_frame, textvariable=self.r_max_var, width=6).pack(side="left")
+
+        ttk.Label(form, text="G min / max").grid(row=8, column=0, sticky="w", pady=3)
+        g_frame = ttk.Frame(form)
+        g_frame.grid(row=8, column=1, sticky="w", padx=6)
+        ttk.Entry(g_frame, textvariable=self.g_min_var, width=6).pack(side="left")
+        ttk.Label(g_frame, text="  a  ").pack(side="left")
+        ttk.Entry(g_frame, textvariable=self.g_max_var, width=6).pack(side="left")
+
+        ttk.Label(form, text="B min / max").grid(row=9, column=0, sticky="w", pady=3)
+        b_frame = ttk.Frame(form)
+        b_frame.grid(row=9, column=1, sticky="w", padx=6)
+        ttk.Entry(b_frame, textvariable=self.b_min_var, width=6).pack(side="left")
+        ttk.Label(b_frame, text="  a  ").pack(side="left")
+        ttk.Entry(b_frame, textvariable=self.b_max_var, width=6).pack(side="left")
+
+        ttk.Separator(form, orient="horizontal").grid(row=10, column=0, columnspan=3, sticky="ew", pady=7)
+
+        ttk.Label(form, text="Editar parámetros de").grid(row=11, column=0, sticky="w", pady=4)
         self.scope_combo = ttk.Combobox(
             form,
             textvariable=self.current_scope_var,
             state="readonly",
             values=self.scope_options,
-            width=28
+            width=26
         )
-        self.scope_combo.grid(row=5, column=1, sticky="w", padx=6)
+        self.scope_combo.grid(row=11, column=1, sticky="w", padx=6)
         self.scope_combo.bind("<<ComboboxSelected>>", self.on_scope_changed)
+        ttk.Button(form, text="Recargar clases", command=self.reload_classes_and_sync_json).grid(row=11, column=2)
 
-        ttk.Button(form, text="Recargar clases", command=self.reload_classes_and_sync_json).grid(row=5, column=2)
-
-        ttk.Label(form, text="Umbral de blanco").grid(row=6, column=0, sticky="w", pady=5)
+        ttk.Label(form, text="Umbral blanco").grid(row=12, column=0, sticky="w", pady=4)
         self.scope_threshold_entry = ttk.Entry(form, width=12)
-        self.scope_threshold_entry.grid(row=6, column=1, sticky="w", padx=6)
+        self.scope_threshold_entry.grid(row=12, column=1, sticky="w", padx=6)
         self.scope_threshold_entry.bind("<FocusOut>", self.on_scope_entries_focus_out)
 
-        ttk.Label(form, text="Mín. pixeles objeto").grid(row=7, column=0, sticky="w", pady=5)
+        ttk.Label(form, text="Mín. pixeles objeto").grid(row=13, column=0, sticky="w", pady=4)
         self.scope_min_fg_entry = ttk.Entry(form, width=12)
-        self.scope_min_fg_entry.grid(row=7, column=1, sticky="w", padx=6)
+        self.scope_min_fg_entry.grid(row=13, column=1, sticky="w", padx=6)
         self.scope_min_fg_entry.bind("<FocusOut>", self.on_scope_entries_focus_out)
 
         ttk.Checkbutton(form, text="Permitir flip horizontal", variable=self.flip_var).grid(
-            row=8, column=1, sticky="w", padx=6, pady=6
+            row=14, column=1, sticky="w", padx=6, pady=5
         )
 
         form.columnconfigure(1, weight=1)
@@ -312,6 +337,7 @@ class AugmentApp(tk.Tk):
             value="La sesión recordará la última carpeta input y output usadas."
         )
         ttk.Label(parent, textvariable=self.session_info_var, justify="left").pack(anchor="w", pady=(8, 0))
+
 
     def _build_center_panel(self, parent: ttk.Frame) -> None:
         top = ttk.LabelFrame(parent, text="Original seleccionado con bbox detectada", padding=10)
@@ -388,558 +414,60 @@ class AugmentApp(tk.Tk):
         bottom_scrollbar.pack(fill="y", side="right")
         self.augmented_listbox.configure(yscrollcommand=bottom_scrollbar.set)
 
-    def _build_classifier_tab(self, parent: ttk.Frame) -> None:
+    def _build_detector_training_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
-        parent.columnconfigure(1, weight=1)
         parent.rowconfigure(1, weight=1)
 
-        train_frame = ttk.LabelFrame(parent, text="Entrenamiento de clasificación", padding=12)
-        train_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=6, pady=6)
+        train_frame = ttk.LabelFrame(parent, text="Entrenamiento del detector", padding=12)
+        train_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
         train_frame.columnconfigure(1, weight=1)
         train_frame.columnconfigure(3, weight=1)
 
         ttk.Label(
             train_frame,
             text=(
-                "Usa directamente las imágenes generadas por la pestaña anterior: "
-                "output/original_images + output/augmented_images."
+                "Esta pestaña se dedica únicamente al entrenamiento. El detector usa "
+                "original_images/original_labels y augmented_images/augmented_labels."
             ),
-            justify="left"
+            justify="left",
+            wraplength=1200
         ).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 10))
 
-        ttk.Label(train_frame, text="Dataset (output actual)").grid(row=1, column=0, sticky="w", pady=4)
-        self.nn_dataset_entry = ttk.Entry(
-            train_frame,
-            textvariable=self.output_dir_var,
-            state="readonly",
-            width=55
+        ttk.Label(train_frame, text="Dataset (output)").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.output_dir_var, state="readonly").grid(
+            row=1, column=1, columnspan=3, sticky="ew", padx=6
         )
-        self.nn_dataset_entry.grid(row=1, column=1, columnspan=3, sticky="ew", padx=6)
 
-        ttk.Label(train_frame, text="Guardar modelo (.pth)").grid(row=2, column=0, sticky="w", pady=4)
-        ttk.Entry(train_frame, textvariable=self.nn_model_path_var).grid(
+        ttk.Label(train_frame, text="Modelo .pth").grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.det_model_path_var).grid(
             row=2, column=1, columnspan=2, sticky="ew", padx=6
         )
         ttk.Button(
             train_frame,
-            text="Elegir ruta",
-            command=self.select_nn_model_path
-        ).grid(row=2, column=3, sticky="e")
-
-        ttk.Label(train_frame, text="Épocas").grid(row=3, column=0, sticky="w", pady=4)
-        ttk.Entry(train_frame, textvariable=self.nn_epochs_var, width=10).grid(
-            row=3, column=1, sticky="w", padx=6
-        )
-
-        ttk.Label(train_frame, text="Batch size").grid(row=3, column=2, sticky="w", pady=4)
-        ttk.Entry(train_frame, textvariable=self.nn_batch_var, width=10).grid(
-            row=3, column=3, sticky="w", padx=6
-        )
-
-        ttk.Label(train_frame, text="Learning rate").grid(row=4, column=0, sticky="w", pady=4)
-        ttk.Entry(train_frame, textvariable=self.nn_lr_var, width=10).grid(
-            row=4, column=1, sticky="w", padx=6
-        )
-
-        ttk.Label(train_frame, text="Tamaño imagen").grid(row=4, column=2, sticky="w", pady=4)
-        ttk.Entry(train_frame, textvariable=self.nn_image_size_var, width=10).grid(
-            row=4, column=3, sticky="w", padx=6
-        )
-
-        ttk.Label(train_frame, text="Validación (0-1)").grid(row=5, column=0, sticky="w", pady=4)
-        ttk.Entry(train_frame, textvariable=self.nn_val_fraction_var, width=10).grid(
-            row=5, column=1, sticky="w", padx=6
-        )
-
-        ttk.Label(train_frame, text="Seed").grid(row=5, column=2, sticky="w", pady=4)
-        ttk.Entry(train_frame, textvariable=self.nn_seed_var, width=10).grid(
-            row=5, column=3, sticky="w", padx=6
-        )
-
-        controls = ttk.Frame(train_frame)
-        controls.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(10, 4))
-
-        self.nn_train_button = ttk.Button(
-            controls,
-            text="Entrenar clasificador",
-            command=self.start_classifier_training
-        )
-        self.nn_train_button.pack(side="left")
-
-        ttk.Button(
-            controls,
-            text="Usar ruta recomendada",
-            command=self.sync_nn_model_path
-        ).pack(side="left", padx=8)
-
-        ttk.Button(
-            controls,
-            text="Leer información del modelo",
-            command=self.refresh_nn_model_info
-        ).pack(side="left")
-
-        self.nn_progress = ttk.Progressbar(
-            train_frame,
-            orient="horizontal",
-            mode="determinate",
-            maximum=100
-        )
-        self.nn_progress.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(8, 4))
-
-        ttk.Label(train_frame, textvariable=self.nn_status_var).grid(
-            row=8, column=0, columnspan=4, sticky="w", pady=(4, 0)
-        )
-        ttk.Label(train_frame, textvariable=self.nn_model_info_var, justify="left").grid(
-            row=9, column=0, columnspan=4, sticky="w", pady=(4, 0)
-        )
-
-        # Zona inferior: prueba de imagen + resultados/log
-        test_frame = ttk.LabelFrame(parent, text="Prueba con una imagen completa", padding=12)
-        test_frame.grid(row=1, column=0, sticky="nsew", padx=6, pady=6)
-        test_frame.columnconfigure(0, weight=1)
-        test_frame.rowconfigure(2, weight=1)
-
-        test_controls = ttk.Frame(test_frame)
-        test_controls.grid(row=0, column=0, sticky="ew")
-
-        ttk.Button(
-            test_controls,
-            text="Seleccionar imagen",
-            command=self.select_nn_test_image
-        ).pack(side="left")
-
-        self.nn_predict_button = ttk.Button(
-            test_controls,
-            text="Clasificar imagen",
-            command=self.start_classifier_prediction
-        )
-        self.nn_predict_button.pack(side="left", padx=8)
-
-        ttk.Label(test_frame, textvariable=self.nn_test_image_var, wraplength=560).grid(
-            row=1, column=0, sticky="w", pady=(8, 6)
-        )
-
-        self.nn_test_preview_label = ttk.Label(
-            test_frame,
-            text="Selecciona una imagen para probar el modelo.",
-            anchor="center",
-            justify="center"
-        )
-        self.nn_test_preview_label.grid(row=2, column=0, sticky="nsew")
-
-        ttk.Label(
-            test_frame,
-            textvariable=self.nn_prediction_var,
-            font=("Segoe UI", 12, "bold"),
-            justify="left"
-        ).grid(row=3, column=0, sticky="w", pady=(10, 4))
-
-        result_frame = ttk.Frame(test_frame)
-        result_frame.grid(row=4, column=0, sticky="ew", pady=(4, 0))
-        result_frame.columnconfigure(0, weight=1)
-
-        self.nn_prob_tree = ttk.Treeview(
-            result_frame,
-            columns=("class", "probability"),
-            show="headings",
-            height=7
-        )
-        self.nn_prob_tree.heading("class", text="Clase")
-        self.nn_prob_tree.heading("probability", text="Probabilidad")
-        self.nn_prob_tree.column("class", width=220, anchor="w")
-        self.nn_prob_tree.column("probability", width=140, anchor="center")
-        self.nn_prob_tree.grid(row=0, column=0, sticky="ew")
-
-        tree_scroll = ttk.Scrollbar(
-            result_frame,
-            orient="vertical",
-            command=self.nn_prob_tree.yview
-        )
-        tree_scroll.grid(row=0, column=1, sticky="ns")
-        self.nn_prob_tree.configure(yscrollcommand=tree_scroll.set)
-
-        log_frame = ttk.LabelFrame(parent, text="Registro de entrenamiento", padding=12)
-        log_frame.grid(row=1, column=1, sticky="nsew", padx=6, pady=6)
-        log_frame.columnconfigure(0, weight=1)
-        log_frame.rowconfigure(0, weight=1)
-
-        self.nn_log_text = tk.Text(log_frame, wrap="word")
-        self.nn_log_text.grid(row=0, column=0, sticky="nsew")
-        self.nn_log_text.configure(state="disabled")
-
-        log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.nn_log_text.yview)
-        log_scroll.grid(row=0, column=1, sticky="ns")
-        self.nn_log_text.configure(yscrollcommand=log_scroll.set)
-
-        self.after(150, self.sync_nn_model_path)
-
-    def sync_nn_model_path(self) -> None:
-        output_dir = self._get_output_dir()
-        if output_dir is None:
-            if not self.nn_model_path_var.get().strip():
-                self.nn_model_path_var.set("")
-            return
-
-        recommended = output_dir / "models" / DEFAULT_MODEL_NAME
-        current = self.nn_model_path_var.get().strip()
-
-        if not current:
-            self.nn_model_path_var.set(str(recommended))
-            return
-
-        current_path = Path(current)
-        # Si todavía apunta al modelo recomendado de otro output, actualízalo.
-        if current_path.name == DEFAULT_MODEL_NAME and current_path.parent.name == "models":
-            self.nn_model_path_var.set(str(recommended))
-
-    def select_nn_model_path(self) -> None:
-        self.sync_nn_model_path()
-        initial = self.nn_model_path_var.get().strip()
-        initial_dir = str(Path(initial).parent) if initial else str(Path.cwd())
-
-        path = filedialog.asksaveasfilename(
-            title="Guardar modelo de clasificación",
-            defaultextension=".pth",
-            filetypes=[("PyTorch model", "*.pth"), ("Todos los archivos", "*.*")],
-            initialdir=initial_dir,
-            initialfile=Path(initial).name if initial else DEFAULT_MODEL_NAME,
-        )
-        if path:
-            self.nn_model_path_var.set(path)
-
-    def append_nn_log(self, text: str) -> None:
-        self.nn_log_text.configure(state="normal")
-        self.nn_log_text.insert("end", text.rstrip() + "\n")
-        self.nn_log_text.see("end")
-        self.nn_log_text.configure(state="disabled")
-
-    def start_classifier_training(self) -> None:
-        if self.nn_training:
-            messagebox.showinfo("Entrenamiento", "Ya hay un entrenamiento en curso.")
-            return
-        threading.Thread(target=self.classifier_training_action, daemon=True).start()
-
-    def classifier_training_action(self) -> None:
-        try:
-            output_dir = self._get_output_dir()
-            if output_dir is None or not output_dir.exists():
-                raise FileNotFoundError(
-                    "Selecciona primero el output del dataset en la pestaña de augmentación."
-                )
-
-            self.sync_nn_model_path()
-            model_path_raw = self.nn_model_path_var.get().strip()
-            if not model_path_raw:
-                raise ValueError("Define dónde guardar el modelo .pth.")
-
-            epochs = int(self.nn_epochs_var.get().strip())
-            batch_size = int(self.nn_batch_var.get().strip())
-            learning_rate = float(self.nn_lr_var.get().strip())
-            image_size = int(self.nn_image_size_var.get().strip())
-            val_fraction = float(self.nn_val_fraction_var.get().strip())
-            seed = int(self.nn_seed_var.get().strip())
-
-            self.nn_training = True
-            self.after(0, lambda: self.nn_train_button.configure(state="disabled"))
-            self.after(0, lambda: self.nn_progress.configure(value=0))
-            self.after(0, lambda: self.nn_status_var.set("Preparando dataset y modelo..."))
-            self.after(0, lambda: self.append_nn_log(
-                f"\n=== Nuevo entrenamiento ===\nDataset: {output_dir}\nModelo: {model_path_raw}"
-            ))
-
-            def progress(data: dict) -> None:
-                epoch = int(data["epoch"])
-                total = int(data["epochs"])
-                percent = 100.0 * epoch / max(total, 1)
-
-                line = (
-                    f"Época {epoch}/{total} | "
-                    f"train loss={data['train_loss']:.4f} | "
-                    f"train acc={data['train_accuracy']:.2f}% | "
-                    f"val loss={data['val_loss']:.4f} | "
-                    f"val acc={data['val_accuracy']:.2f}%"
-                )
-
-                self.after(0, lambda p=percent: self.nn_progress.configure(value=p))
-                self.after(0, lambda l=line: self.append_nn_log(l))
-                self.after(0, lambda e=epoch, t=total, d=data: self.nn_status_var.set(
-                    f"Entrenando {e}/{t} | dispositivo={d['device']} | "
-                    f"mejor val={d['best_val_accuracy']:.2f}%"
-                ))
-
-            summary = train_classifier(
-                dataset_output_dir=output_dir,
-                model_path=Path(model_path_raw),
-                epochs=epochs,
-                batch_size=batch_size,
-                learning_rate=learning_rate,
-                image_size=image_size,
-                val_fraction=val_fraction,
-                seed=seed,
-                progress_callback=progress,
-            )
-
-            def finish() -> None:
-                self.nn_progress.configure(value=100)
-                self.nn_status_var.set(
-                    f"Entrenamiento terminado. Mejor validación: "
-                    f"{summary['best_val_accuracy']:.2f}% (época {summary['best_epoch']})."
-                )
-
-                self.append_nn_log(
-                    f"Clases: {', '.join(summary['class_names'])}\n"
-                    f"Imágenes: {summary['total_images']} "
-                    f"(train={summary['train_images']}, val={summary['val_images']})\n"
-                    f"Dispositivo: {summary['device']}\n"
-                    f"Mejor modelo: {summary['model_path']}"
-                )
-
-                for warning in summary.get("warnings", []):
-                    self.append_nn_log("AVISO: " + warning)
-
-                self.refresh_nn_model_info()
-                messagebox.showinfo(
-                    "Entrenamiento completado",
-                    (
-                        f"Modelo guardado en:\n{summary['model_path']}\n\n"
-                        f"Clases: {summary['num_classes']}\n"
-                        f"Imágenes: {summary['total_images']}\n"
-                        f"Mejor validación: {summary['best_val_accuracy']:.2f}%"
-                    )
-                )
-
-            self.after(0, finish)
-
-        except Exception as e:
-            self.after(0, lambda err=str(e): self.nn_status_var.set("Error de entrenamiento."))
-            self.after(0, lambda err=str(e): self.append_nn_log("ERROR: " + err))
-            self.after(0, lambda err=str(e): messagebox.showerror("Error de entrenamiento", err))
-        finally:
-            self.nn_training = False
-            self.after(0, lambda: self.nn_train_button.configure(state="normal"))
-
-    def refresh_nn_model_info(self) -> None:
-        try:
-            path_raw = self.nn_model_path_var.get().strip()
-            if not path_raw:
-                self.nn_model_info_var.set("Sin ruta de modelo.")
-                return
-
-            path = Path(path_raw)
-            if not path.exists():
-                self.nn_model_info_var.set("El modelo aún no existe en la ruta indicada.")
-                return
-
-            info = load_checkpoint_metadata(path)
-            classes = ", ".join(info.get("class_names", []))
-            best = info.get("best_val_accuracy")
-            best_text = "N/D" if best is None else f"{float(best):.2f}%"
-
-            self.nn_model_info_var.set(
-                f"Modelo: {info.get('model_type')} | "
-                f"tamaño={info.get('image_size')} | "
-                f"mejor val={best_text}\n"
-                f"Clases: {classes}"
-            )
-        except Exception as e:
-            self.nn_model_info_var.set(f"No se pudo leer el modelo: {e}")
-
-    def select_nn_test_image(self) -> None:
-        path = filedialog.askopenfilename(
-            title="Selecciona una imagen para clasificar",
-            filetypes=[
-                ("Imágenes", "*.jpg *.jpeg *.png *.bmp *.webp"),
-                ("Todos los archivos", "*.*")
-            ]
-        )
-        if not path:
-            return
-
-        self.nn_test_image_var.set(path)
-        self.show_nn_test_preview(Path(path))
-        self.nn_prediction_var.set("Imagen cargada. Presiona 'Clasificar imagen'.")
-
-    def show_nn_test_preview(self, image_path: Path) -> None:
-        try:
-            with Image.open(image_path) as img:
-                preview = img.convert("RGB").copy()
-                preview.thumbnail((620, 330))
-
-            self.nn_test_preview_photo = ImageTk.PhotoImage(preview)
-            self.nn_test_preview_label.configure(image=self.nn_test_preview_photo, text="")
-        except Exception as e:
-            self.nn_test_preview_photo = None
-            self.nn_test_preview_label.configure(
-                image="",
-                text=f"No se pudo mostrar la imagen:\n{e}"
-            )
-
-    def start_classifier_prediction(self) -> None:
-        threading.Thread(target=self.classifier_prediction_action, daemon=True).start()
-
-    def classifier_prediction_action(self) -> None:
-        try:
-            image_raw = self.nn_test_image_var.get().strip()
-            model_raw = self.nn_model_path_var.get().strip()
-
-            if not image_raw:
-                raise ValueError("Selecciona primero una imagen de prueba.")
-            if not model_raw:
-                raise ValueError("Selecciona o entrena primero un modelo .pth.")
-
-            self.after(0, lambda: self.nn_predict_button.configure(state="disabled"))
-            self.after(0, lambda: self.nn_prediction_var.set("Clasificando..."))
-
-            result = predict_image(
-                image_path=Path(image_raw),
-                model_path=Path(model_raw),
-            )
-
-            def finish_prediction() -> None:
-                self.nn_prediction_var.set(
-                    f"Predicción: {result['predicted_class']}\n"
-                    f"Confianza: {result['confidence_percentage']:.2f}% "
-                    f"| dispositivo: {result['device']}"
-                )
-
-                for item in self.nn_prob_tree.get_children():
-                    self.nn_prob_tree.delete(item)
-
-                for row in result["probabilities"]:
-                    self.nn_prob_tree.insert(
-                        "",
-                        "end",
-                        values=(row["class_name"], f"{row['percentage']:.2f}%")
-                    )
-
-            self.after(0, finish_prediction)
-
-        except Exception as e:
-            self.after(0, lambda err=str(e): self.nn_prediction_var.set("No se pudo clasificar."))
-            self.after(0, lambda err=str(e): messagebox.showerror("Error de predicción", err))
-        finally:
-            self.after(0, lambda: self.nn_predict_button.configure(state="normal"))
-
-    def _build_detector_tab(self, parent: ttk.Frame) -> None:
-        parent.columnconfigure(0, weight=1)
-        parent.columnconfigure(1, weight=1)
-        parent.rowconfigure(1, weight=1)
-
-        train_frame = ttk.LabelFrame(
-            parent,
-            text="Entrenamiento del detector de objetos",
-            padding=12
-        )
-        train_frame.grid(
-            row=0, column=0, columnspan=2,
-            sticky="ew", padx=6, pady=6
-        )
-        train_frame.columnconfigure(1, weight=1)
-        train_frame.columnconfigure(3, weight=1)
-
-        ttk.Label(
-            train_frame,
-            text=(
-                "Usa las mismas imágenes y bounding boxes generadas por la "
-                "pestaña 1. Puedes entrenar una sola clase, por ejemplo 'moneda', "
-                "y después seleccionar una fotografía con varias monedas para "
-                "detectar cada una y contarlas."
-            ),
-            justify="left",
-            wraplength=1200,
-        ).grid(
-            row=0, column=0, columnspan=4,
-            sticky="w", pady=(0, 10)
-        )
-
-        ttk.Label(train_frame, text="Dataset (output actual)").grid(
-            row=1, column=0, sticky="w", pady=4
-        )
-        ttk.Entry(
-            train_frame,
-            textvariable=self.output_dir_var,
-            state="readonly",
-            width=55
-        ).grid(
-            row=1, column=1, columnspan=3,
-            sticky="ew", padx=6
-        )
-
-        ttk.Label(train_frame, text="Guardar detector (.pth)").grid(
-            row=2, column=0, sticky="w", pady=4
-        )
-        ttk.Entry(
-            train_frame,
-            textvariable=self.det_model_path_var
-        ).grid(
-            row=2, column=1, columnspan=2,
-            sticky="ew", padx=6
-        )
-        ttk.Button(
-            train_frame,
-            text="Elegir ruta",
+            text="Elegir / cargar modelo",
             command=self.select_detector_model_path
         ).grid(row=2, column=3, sticky="e")
 
-        ttk.Label(train_frame, text="Épocas").grid(
-            row=3, column=0, sticky="w", pady=4
-        )
-        ttk.Entry(
-            train_frame,
-            textvariable=self.det_epochs_var,
-            width=10
-        ).grid(row=3, column=1, sticky="w", padx=6)
+        ttk.Label(train_frame, text="Épocas").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.det_epochs_var, width=10).grid(row=3, column=1, sticky="w", padx=6)
+        ttk.Label(train_frame, text="Batch size").grid(row=3, column=2, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.det_batch_var, width=10).grid(row=3, column=3, sticky="w", padx=6)
 
-        ttk.Label(train_frame, text="Batch size").grid(
-            row=3, column=2, sticky="w", pady=4
-        )
-        ttk.Entry(
-            train_frame,
-            textvariable=self.det_batch_var,
-            width=10
-        ).grid(row=3, column=3, sticky="w", padx=6)
+        ttk.Label(train_frame, text="Learning rate").grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.det_lr_var, width=10).grid(row=4, column=1, sticky="w", padx=6)
+        ttk.Label(train_frame, text="Validación").grid(row=4, column=2, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.det_val_fraction_var, width=10).grid(row=4, column=3, sticky="w", padx=6)
 
-        ttk.Label(train_frame, text="Learning rate").grid(
-            row=4, column=0, sticky="w", pady=4
-        )
-        ttk.Entry(
-            train_frame,
-            textvariable=self.det_lr_var,
-            width=10
-        ).grid(row=4, column=1, sticky="w", padx=6)
-
-        ttk.Label(train_frame, text="Validación (0-1)").grid(
-            row=4, column=2, sticky="w", pady=4
-        )
-        ttk.Entry(
-            train_frame,
-            textvariable=self.det_val_fraction_var,
-            width=10
-        ).grid(row=4, column=3, sticky="w", padx=6)
-
-        ttk.Label(train_frame, text="Seed").grid(
-            row=5, column=0, sticky="w", pady=4
-        )
-        ttk.Entry(
-            train_frame,
-            textvariable=self.det_seed_var,
-            width=10
-        ).grid(row=5, column=1, sticky="w", padx=6)
-
+        ttk.Label(train_frame, text="Seed").grid(row=5, column=0, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.det_seed_var, width=10).grid(row=5, column=1, sticky="w", padx=6)
         ttk.Checkbutton(
             train_frame,
-            text="Usar pesos COCO preentrenados (recomendado)",
+            text="Usar pesos COCO preentrenados",
             variable=self.det_pretrained_var
-        ).grid(
-            row=5, column=2, columnspan=2,
-            sticky="w", padx=6
-        )
+        ).grid(row=5, column=2, columnspan=2, sticky="w", padx=6)
 
         controls = ttk.Frame(train_frame)
-        controls.grid(
-            row=6, column=0, columnspan=4,
-            sticky="ew", pady=(10, 4)
-        )
+        controls.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(10, 4))
 
         self.det_train_button = ttk.Button(
             controls,
@@ -947,277 +475,149 @@ class AugmentApp(tk.Tk):
             command=self.start_detector_training
         )
         self.det_train_button.pack(side="left")
-
         ttk.Button(
             controls,
-            text="Usar ruta recomendada",
+            text="Ruta recomendada",
             command=self.sync_detector_model_path
         ).pack(side="left", padx=8)
-
         ttk.Button(
             controls,
-            text="Leer información del detector",
+            text="Información del modelo",
             command=self.refresh_detector_model_info
         ).pack(side="left")
 
         self.det_progress = ttk.Progressbar(
-            train_frame,
-            orient="horizontal",
-            mode="determinate",
-            maximum=100
+            train_frame, orient="horizontal", mode="determinate", maximum=100
         )
-        self.det_progress.grid(
-            row=7, column=0, columnspan=4,
-            sticky="ew", pady=(8, 4)
+        self.det_progress.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(8, 4))
+
+        ttk.Label(train_frame, textvariable=self.det_status_var).grid(
+            row=8, column=0, columnspan=4, sticky="w", pady=(4, 0)
+        )
+        ttk.Label(train_frame, textvariable=self.det_model_info_var, justify="left").grid(
+            row=9, column=0, columnspan=4, sticky="w", pady=(4, 0)
         )
 
-        ttk.Label(
-            train_frame,
-            textvariable=self.det_status_var
-        ).grid(
-            row=8, column=0, columnspan=4,
-            sticky="w", pady=(4, 0)
-        )
+        log_frame = ttk.LabelFrame(parent, text="Avance por épocas / información", padding=12)
+        log_frame.grid(row=1, column=0, sticky="nsew", padx=6, pady=6)
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+
+        self.det_log_text = tk.Text(log_frame, wrap="word")
+        self.det_log_text.grid(row=0, column=0, sticky="nsew")
+        log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.det_log_text.yview)
+        log_scroll.grid(row=0, column=1, sticky="ns")
+        self.det_log_text.configure(yscrollcommand=log_scroll.set, state="disabled")
 
         ttk.Label(
-            train_frame,
-            textvariable=self.det_model_info_var,
+            log_frame,
+            text="El mejor checkpoint se guarda automáticamente según el F1 de validación.",
             justify="left"
-        ).grid(
-            row=9, column=0, columnspan=4,
-            sticky="w", pady=(4, 0)
-        )
+        ).grid(row=1, column=0, sticky="w", pady=(8, 0))
 
-        # -------------------------------------------------------------
-        # Vista / captura
-        # -------------------------------------------------------------
-        image_frame = ttk.LabelFrame(
-            parent,
-            text="Prueba de conteo con imagen",
-            padding=12
-        )
-        image_frame.grid(
-            row=1, column=0,
-            sticky="nsew", padx=6, pady=6
-        )
+        self.after(180, self.sync_detector_model_path)
+
+
+    def _build_detector_test_tab(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=7)
+        parent.columnconfigure(1, weight=3)
+        parent.rowconfigure(1, weight=1)
+
+        top = ttk.LabelFrame(parent, text="Fuente de imagen", padding=10)
+        top.grid(row=0, column=0, columnspan=2, sticky="ew", padx=6, pady=6)
+
+        ttk.Button(top, text="Seleccionar imagen", command=self.select_detector_test_image).pack(side="left")
+        ttk.Button(top, text="Contar objetos", command=self.start_detector_prediction).pack(side="left", padx=8)
+        ttk.Button(top, text="Limpiar", command=self.clear_detector_test).pack(side="left", padx=(0, 16))
+
+        ttk.Separator(top, orient="vertical").pack(side="left", fill="y", padx=8)
+        ttk.Label(top, text="Webcam índice").pack(side="left")
+        ttk.Entry(top, textvariable=self.det_camera_index_var, width=4).pack(side="left", padx=4)
+        ttk.Label(top, text="W").pack(side="left")
+        ttk.Entry(top, textvariable=self.det_camera_width_var, width=6).pack(side="left", padx=4)
+        ttk.Label(top, text="H").pack(side="left")
+        ttk.Entry(top, textvariable=self.det_camera_height_var, width=6).pack(side="left", padx=4)
+        ttk.Button(top, text="Capturar frame", command=self.start_webcam_capture).pack(side="left", padx=6)
+        ttk.Button(top, text="Capturar y contar", command=self.start_webcam_capture_and_count).pack(side="left")
+
+        ttk.Separator(top, orient="vertical").pack(side="left", fill="y", padx=10)
+        ttk.Label(top, text="Confianza mín.").pack(side="left")
+        ttk.Entry(top, textvariable=self.det_confidence_var, width=7).pack(side="left", padx=5)
+
+        image_frame = ttk.LabelFrame(parent, text="Imagen y bounding boxes", padding=10)
+        image_frame.grid(row=1, column=0, sticky="nsew", padx=(6, 3), pady=6)
         image_frame.columnconfigure(0, weight=1)
-        image_frame.rowconfigure(5, weight=1)
-
-        file_controls = ttk.Frame(image_frame)
-        file_controls.grid(row=0, column=0, sticky="ew")
-
-        ttk.Button(
-            file_controls,
-            text="Seleccionar imagen",
-            command=self.select_detector_test_image
-        ).pack(side="left")
-
-        ttk.Button(
-            file_controls,
-            text="Contar objetos",
-            command=self.start_detector_prediction
-        ).pack(side="left", padx=8)
-
-        ttk.Button(
-            file_controls,
-            text="Limpiar prueba",
-            command=self.clear_detector_test
-        ).pack(side="left")
+        image_frame.rowconfigure(1, weight=1)
 
         ttk.Label(
             image_frame,
             textvariable=self.det_image_path_var,
-            wraplength=620
-        ).grid(
-            row=1, column=0,
-            sticky="w", pady=(8, 8)
-        )
-
-        webcam = ttk.LabelFrame(
-            image_frame,
-            text="Webcam (opcional / para después)",
-            padding=8
-        )
-        webcam.grid(
-            row=2, column=0,
-            sticky="ew", pady=(0, 8)
-        )
-
-        ttk.Label(webcam, text="Cámara").pack(side="left")
-        ttk.Entry(
-            webcam,
-            textvariable=self.det_camera_index_var,
-            width=5
-        ).pack(side="left", padx=(4, 10))
-
-        ttk.Label(webcam, text="Ancho").pack(side="left")
-        ttk.Entry(
-            webcam,
-            textvariable=self.det_camera_width_var,
-            width=7
-        ).pack(side="left", padx=(4, 10))
-
-        ttk.Label(webcam, text="Alto").pack(side="left")
-        ttk.Entry(
-            webcam,
-            textvariable=self.det_camera_height_var,
-            width=7
-        ).pack(side="left", padx=(4, 10))
-
-        ttk.Button(
-            webcam,
-            text="Capturar frame",
-            command=self.start_webcam_capture
-        ).pack(side="left", padx=6)
-
-        ttk.Button(
-            webcam,
-            text="Capturar y contar",
-            command=self.start_webcam_capture_and_count
-        ).pack(side="left")
-
-        conf_frame = ttk.Frame(image_frame)
-        conf_frame.grid(
-            row=3, column=0,
-            sticky="ew", pady=(0, 6)
-        )
-
-        ttk.Label(
-            conf_frame,
-            text="Confianza mínima:"
-        ).pack(side="left")
-
-        ttk.Entry(
-            conf_frame,
-            textvariable=self.det_confidence_var,
-            width=8
-        ).pack(side="left", padx=6)
-
-        ttk.Label(
-            conf_frame,
-            text="Ejemplo: 0.50 = conservar detecciones ≥ 50%"
-        ).pack(side="left")
-
-        coin_guide = ttk.LabelFrame(
-            image_frame,
-            text="Prueba rápida con monedas",
-            padding=8
-        )
-        coin_guide.grid(
-            row=4, column=0,
-            sticky="ew", pady=(0, 8)
-        )
-
-        ttk.Label(
-            coin_guide,
-            text=(
-                "1) En input crea una carpeta llamada 'moneda'.  "
-                "2) Coloca fotos de UNA moneda por imagen sobre fondo uniforme.  "
-                "3) Genera el dataset aumentado.  "
-                "4) Entrena el detector.  "
-                "5) Selecciona una foto NUEVA con varias monedas y presiona "
-                "'Contar objetos'."
-            ),
             justify="left",
-            wraplength=620
-        ).pack(anchor="w")
+            wraplength=900
+        ).grid(row=0, column=0, sticky="w", pady=(0, 8))
 
         self.det_preview_label = ttk.Label(
             image_frame,
             text=(
-                "Selecciona una fotografía desde tu computadora.\n"
-                "Ejemplo: una foto con 5, 10 o más monedas separadas."
+                "Selecciona una imagen para realizar una prueba de conteo.\n"
+                "Aquí se mostrará la imagen anotada en un área grande."
             ),
             anchor="center",
             justify="center"
         )
-        self.det_preview_label.grid(
-            row=5, column=0,
-            sticky="nsew"
-        )
+        self.det_preview_label.grid(row=1, column=0, sticky="nsew")
+
+        result_frame = ttk.LabelFrame(parent, text="Resultado", padding=12)
+        result_frame.grid(row=1, column=1, sticky="nsew", padx=(3, 6), pady=6)
+        result_frame.columnconfigure(0, weight=1)
+        result_frame.rowconfigure(3, weight=1)
 
         ttk.Label(
-            image_frame,
+            result_frame,
             textvariable=self.det_result_var,
-            font=("Segoe UI", 12, "bold"),
-            justify="left"
-        ).grid(
-            row=6, column=0,
-            sticky="w", pady=(10, 0)
-        )
-
-        # -------------------------------------------------------------
-        # Resultados + log
-        # -------------------------------------------------------------
-        results_frame = ttk.LabelFrame(
-            parent,
-            text="Conteo y registro",
-            padding=12
-        )
-        results_frame.grid(
-            row=1, column=1,
-            sticky="nsew", padx=6, pady=6
-        )
-        results_frame.columnconfigure(0, weight=1)
-        results_frame.rowconfigure(2, weight=1)
-
-        ttk.Label(
-            results_frame,
-            text="Conteo por clase",
-            font=("Segoe UI", 10, "bold")
-        ).grid(row=0, column=0, sticky="w")
+            font=("Segoe UI", 13, "bold"),
+            justify="left",
+            wraplength=360
+        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
 
         self.det_count_tree = ttk.Treeview(
-            results_frame,
+            result_frame,
             columns=("class", "count"),
             show="headings",
             height=7
         )
         self.det_count_tree.heading("class", text="Clase")
         self.det_count_tree.heading("count", text="Cantidad")
-        self.det_count_tree.column("class", width=230, anchor="w")
-        self.det_count_tree.column("count", width=100, anchor="center")
-        self.det_count_tree.grid(
-            row=1, column=0,
-            sticky="ew", pady=(4, 10)
+        self.det_count_tree.column("class", width=210, anchor="w")
+        self.det_count_tree.column("count", width=80, anchor="center")
+        self.det_count_tree.grid(row=1, column=0, sticky="ew")
+
+        ttk.Label(result_frame, text="Detalle de detecciones", font=("Segoe UI", 10, "bold")).grid(
+            row=2, column=0, sticky="w", pady=(12, 4)
         )
 
-        self.det_log_text = tk.Text(
-            results_frame,
-            wrap="word"
-        )
-        self.det_log_text.grid(
-            row=2, column=0,
-            sticky="nsew"
-        )
-
-        det_scroll = ttk.Scrollbar(
-            results_frame,
-            orient="vertical",
-            command=self.det_log_text.yview
-        )
-        det_scroll.grid(row=2, column=1, sticky="ns")
-        self.det_log_text.configure(
-            yscrollcommand=det_scroll.set,
-            state="disabled"
-        )
+        self.det_result_text = tk.Text(result_frame, wrap="word", width=38)
+        self.det_result_text.grid(row=3, column=0, sticky="nsew")
+        result_scroll = ttk.Scrollbar(result_frame, orient="vertical", command=self.det_result_text.yview)
+        result_scroll.grid(row=3, column=1, sticky="ns")
+        self.det_result_text.configure(yscrollcommand=result_scroll.set, state="disabled")
 
         ttk.Label(
-            results_frame,
-            text=(
-                "Nota v11: el dataset actual contiene normalmente 1 bbox por "
-                "imagen. El detector ya puede devolver varias cajas en una foto, "
-                "pero para mejorar el conteo real conviene incorporar después "
-                "escenas con varios objetos."
-            ),
+            result_frame,
+            text="La webcam es opcional; puedes trabajar solo con imágenes guardadas.",
             justify="left",
-            wraplength=620
-        ).grid(
-            row=3, column=0,
-            sticky="w", pady=(10, 0)
-        )
+            wraplength=360
+        ).grid(row=4, column=0, sticky="w", pady=(10, 0))
 
-        self.after(180, self.sync_detector_model_path)
+
+    def set_detector_result_text(self, text: str) -> None:
+        if not hasattr(self, "det_result_text"):
+            return
+        self.det_result_text.configure(state="normal")
+        self.det_result_text.delete("1.0", "end")
+        self.det_result_text.insert("1.0", text)
+        self.det_result_text.configure(state="disabled")
+
 
     def append_detector_log(self, text: str) -> None:
         self.det_log_text.configure(state="normal")
@@ -1501,14 +901,16 @@ class AugmentApp(tk.Tk):
         self.det_preview_label.configure(
             image="",
             text=(
-                "Selecciona una fotografía desde tu computadora.\n"
-                "Ejemplo: una foto con varias monedas separadas."
+                "Selecciona una imagen para realizar una prueba de conteo.\n"
+                "Aquí se mostrará la imagen anotada en un área grande."
             )
         )
         self.det_result_var.set("Sin conteo.")
+        self.set_detector_result_text("")
 
         for item in self.det_count_tree.get_children():
             self.det_count_tree.delete(item)
+
 
     def select_detector_test_image(self) -> None:
         path = filedialog.askopenfilename(
@@ -1542,12 +944,17 @@ class AugmentApp(tk.Tk):
 
     def show_detector_preview(self, image: Image.Image) -> None:
         preview = image.convert("RGB").copy()
-        preview.thumbnail((680, 390))
+
+        # El área de prueba ahora ocupa la mayor parte de la pestaña.
+        width = self.det_preview_label.winfo_width()
+        height = self.det_preview_label.winfo_height()
+        max_width = width - 20 if width > 200 else 950
+        max_height = height - 20 if height > 200 else 600
+
+        preview.thumbnail((max_width, max_height))
         self.det_preview_photo = ImageTk.PhotoImage(preview)
-        self.det_preview_label.configure(
-            image=self.det_preview_photo,
-            text=""
-        )
+        self.det_preview_label.configure(image=self.det_preview_photo, text="")
+
 
     def start_detector_prediction(self) -> None:
         threading.Thread(
@@ -1632,13 +1039,30 @@ class AugmentApp(tk.Tk):
                     f"threshold={confidence:.2f}"
                 )
 
-                for detection in result["detections"]:
+                detail_lines = [
+                    f"Total detectado: {result['total']}",
+                    f"Confianza mínima: {confidence:.2f}",
+                    "",
+                ]
+
+                for index, detection in enumerate(result["detections"], start=1):
+                    bbox_text = [round(v, 1) for v in detection["bbox_xyxy"]]
+                    detail_lines.append(
+                        f"{index}. {detection['class_name']}\n"
+                        f"   Confianza: {detection['percentage']:.2f}%\n"
+                        f"   BBox: {bbox_text}"
+                    )
                     self.append_detector_log(
                         f"- {detection['class_name']} | "
-                        f"{detection['percentage']:.2f}% | "
-                        f"bbox="
-                        f"{[round(v, 1) for v in detection['bbox_xyxy']]}"
+                        f"{detection['percentage']:.2f}% | bbox={bbox_text}"
                     )
+
+                if not result["detections"]:
+                    detail_lines.append(
+                        "No hubo detecciones por encima del umbral de confianza."
+                    )
+
+                self.set_detector_result_text("\n\n".join(detail_lines))
 
             self.after(0, finish)
 
@@ -1765,7 +1189,6 @@ class AugmentApp(tk.Tk):
 
         if last_output and Path(last_output).exists():
             self.refresh_augmented_list()
-            self.sync_nn_model_path()
             self.sync_detector_model_path()
 
         if last_input or last_output:
@@ -1781,17 +1204,38 @@ class AugmentApp(tk.Tk):
             pass
         self.destroy()
 
-    def _get_detection_params(self) -> tuple[int, int, bool]:
+    def _get_detection_params(self):
         threshold = int(self.threshold_var.get().strip())
         min_fg = int(self.min_fg_var.get().strip())
         enable_hflip = bool(self.flip_var.get())
+        detection_mode = self.detection_mode_var.get().strip()
+
+        r_min, r_max = int(self.r_min_var.get()), int(self.r_max_var.get())
+        g_min, g_max = int(self.g_min_var.get()), int(self.g_max_var.get())
+        b_min, b_max = int(self.b_min_var.get()), int(self.b_max_var.get())
 
         if not (0 <= threshold <= 255):
             raise ValueError("El umbral de blanco global debe estar entre 0 y 255.")
         if min_fg < 1:
             raise ValueError("El mínimo global de pixeles debe ser >= 1.")
+        if detection_mode not in {"white", "rgb_range"}:
+            raise ValueError("Modo de BBox inválido.")
 
-        return threshold, min_fg, enable_hflip
+        values = [r_min, r_max, g_min, g_max, b_min, b_max]
+        if any(v < 0 or v > 255 for v in values):
+            raise ValueError("Los valores RGB deben estar entre 0 y 255.")
+        if r_min > r_max or g_min > g_max or b_min > b_max:
+            raise ValueError("Cada canal debe cumplir min <= max.")
+
+        return (
+            threshold,
+            min_fg,
+            enable_hflip,
+            detection_mode,
+            (r_min, g_min, b_min),
+            (r_max, g_max, b_max),
+        )
+
 
     def _validate_scope_values(self, white_threshold: str, min_fg: str) -> tuple[int, int]:
         w = int(white_threshold.strip())
@@ -1833,13 +1277,17 @@ class AugmentApp(tk.Tk):
         if input_dir is None or not input_dir.exists():
             return
 
-        default_threshold, default_min_fg, _ = self._get_detection_params()
+        threshold, min_fg, _, detection_mode, rgb_min, rgb_max = self._get_detection_params()
         save_class_config_json(
             input_dir=input_dir,
-            default_white_threshold=default_threshold,
-            default_min_foreground_pixels=default_min_fg,
+            default_white_threshold=threshold,
+            default_min_foreground_pixels=min_fg,
             class_params=self.class_params,
+            detection_mode=detection_mode,
+            rgb_min=rgb_min,
+            rgb_max=rgb_max,
         )
+
 
     def load_persisted_config_from_input(self, ask_about_missing: bool = True) -> None:
         input_dir = self._get_input_dir()
@@ -1853,6 +1301,18 @@ class AugmentApp(tk.Tk):
         if default_data:
             self.threshold_var.set(str(default_data.get("white_threshold", self.threshold_var.get())))
             self.min_fg_var.set(str(default_data.get("min_foreground_pixels", self.min_fg_var.get())))
+            self.detection_mode_var.set(str(default_data.get("detection_mode", self.detection_mode_var.get())))
+
+            rgb_min = default_data.get("rgb_min", [0, 0, 0])
+            rgb_max = default_data.get("rgb_max", [240, 240, 240])
+            if len(rgb_min) == 3:
+                self.r_min_var.set(str(rgb_min[0]))
+                self.g_min_var.set(str(rgb_min[1]))
+                self.b_min_var.set(str(rgb_min[2]))
+            if len(rgb_max) == 3:
+                self.r_max_var.set(str(rgb_max[0]))
+                self.g_max_var.set(str(rgb_max[1]))
+                self.b_max_var.set(str(rgb_max[2]))
 
         loaded_class_params = {}
         for class_name, values in classes_data.items():
@@ -2016,7 +1476,6 @@ class AugmentApp(tk.Tk):
         if folder:
             self.output_dir_var.set(folder)
             self.refresh_augmented_list()
-            self.sync_nn_model_path()
             self.sync_detector_model_path()
             self.save_session_json()
             self.session_info_var.set(
@@ -2097,19 +1556,22 @@ class AugmentApp(tk.Tk):
                 return
 
             input_dir = self._get_input_dir()
-            global_threshold, global_min_fg, _ = self._get_detection_params()
+            threshold, min_fg, _, detection_mode, rgb_min, rgb_max = self._get_detection_params()
 
             class_name = get_class_name(input_dir, image_path)
             class_params = self.class_params.get(class_name, {})
-            used_threshold = int(class_params.get("white_threshold", global_threshold))
-            used_min_fg = int(class_params.get("min_foreground_pixels", global_min_fg))
+            used_threshold = int(class_params.get("white_threshold", threshold))
+            used_min_fg = int(class_params.get("min_foreground_pixels", min_fg))
 
             with Image.open(image_path) as img:
                 img = ensure_rgb(img)
-                bbox = detect_bbox_white_background(
+                bbox = detect_bbox_configurable(
                     img,
+                    detection_mode=detection_mode,
                     white_threshold=used_threshold,
-                    min_foreground_pixels=used_min_fg
+                    min_foreground_pixels=used_min_fg,
+                    rgb_min=rgb_min,
+                    rgb_max=rgb_max,
                 )
                 preview = build_preview_image(img, bbox, max_size=(820, 290))
 
@@ -2117,24 +1579,30 @@ class AugmentApp(tk.Tk):
             self.original_preview_label.configure(image=self.original_preview_photo, text="")
 
             shown_class = "(root)" if class_name == ROOT_CLASS_NAME else class_name
+            mode_text = (
+                f"modo={detection_mode} | RGB={rgb_min}..{rgb_max}"
+                if detection_mode == "rgb_range"
+                else f"modo=white | threshold={used_threshold}"
+            )
 
             if bbox is None:
                 self.original_preview_info_var.set(
                     f"Imagen: {image_path.name}\n"
                     f"Clase: {shown_class}\n"
-                    f"No se detectó bbox con threshold={used_threshold} y min_fg={used_min_fg}."
+                    f"No se detectó bbox. {mode_text} | min_fg={used_min_fg}"
                 )
             else:
                 x1, y1, x2, y2 = bbox
                 self.original_preview_info_var.set(
                     f"Imagen: {image_path.name}\n"
                     f"Clase: {shown_class}\n"
-                    f"BBox original XYXY: [{x1}, {y1}, {x2}, {y2}]\n"
-                    f"threshold usado={used_threshold} | min_fg usado={used_min_fg}"
+                    f"BBox XYXY: [{x1}, {y1}, {x2}, {y2}]\n"
+                    f"{mode_text} | min_fg={used_min_fg}"
                 )
         except Exception as e:
             self.clear_original_preview()
             messagebox.showerror("Error de original", str(e))
+
 
     def update_augmented_preview(self) -> None:
         try:
@@ -2199,13 +1667,13 @@ class AugmentApp(tk.Tk):
     def generate_action(self) -> None:
         try:
             if not self.autosave_current_scope_values(silent=True):
-                raise ValueError("No se pudieron guardar los valores actuales de umbral.")
+                raise ValueError("No se pudieron guardar los valores actuales.")
 
             input_dir = self._get_input_dir()
             output_dir = self._get_output_dir()
             copies = int(self.copies_var.get().strip())
             seed = int(self.seed_var.get().strip())
-            threshold, min_fg, enable_hflip = self._get_detection_params()
+            threshold, min_fg, enable_hflip, detection_mode, rgb_min, rgb_max = self._get_detection_params()
 
             if input_dir is None or not input_dir.exists():
                 raise FileNotFoundError("La carpeta input no existe.")
@@ -2214,6 +1682,7 @@ class AugmentApp(tk.Tk):
             if copies < 1:
                 raise ValueError("El número de copias debe ser >= 1.")
 
+            self.write_config_json()
             self.save_session_json()
 
             summary = generate_augmented_dataset_with_bboxes(
@@ -2225,13 +1694,15 @@ class AugmentApp(tk.Tk):
                 min_foreground_pixels=min_fg,
                 enable_hflip=enable_hflip,
                 class_params=self.class_params,
+                detection_mode=detection_mode,
+                rgb_min=rgb_min,
+                rgb_max=rgb_max,
             )
 
             self.after(0, self.refresh_augmented_list)
 
             skipped = summary.get("skipped_images", [])
             class_to_id = summary.get("class_to_id", {})
-
             class_lines = ["Mapa de clases:"]
             for class_name, class_id in class_to_id.items():
                 shown_name = "(root)" if class_name == ROOT_CLASS_NAME else class_name
@@ -2247,17 +1718,19 @@ class AugmentApp(tk.Tk):
                 "Éxito",
                 (
                     "Proceso completado.\n\n"
+                    f"Modo BBox: {detection_mode}\n"
+                    f"RGB min/max: {rgb_min} / {rgb_max}\n\n"
                     f"Originales encontradas: {summary['original_images_found']}\n"
                     f"Originales copiadas: {summary['copied_original_images']}\n"
                     f"Augmentadas creadas: {summary['augmented_images_created']}\n"
-                    f"Labels creados: {summary['label_files_created']}\n"
-                    f"Manifest: {summary['manifest_path']}\n\n"
+                    f"Labels creados: {summary['label_files_created']}\n\n"
                     + "\n".join(class_lines)
                     + skipped_msg
                 )
             )
         except Exception as e:
             messagebox.showerror("Error", str(e))
+
 
     def clean_action(self) -> None:
         try:

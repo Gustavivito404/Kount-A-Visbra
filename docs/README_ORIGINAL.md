@@ -1,109 +1,67 @@
-# Augment GUI Project v11 - Pruebas con monedas
+# Augment GUI Project v12
 
-Esta revisión mantiene la v11 y mejora el flujo para hacer pruebas de conteo
-seleccionando imágenes desde la computadora, sin necesidad de tener webcam.
+La interfaz se centra ahora exclusivamente en el flujo de detección y conteo.
 
-## Estructura
+## Pestañas visibles
 
-```text
-augment_gui_project_v11_monedas/
-├── src/
-│   ├── __init__.py
-│   ├── gui_app.py
-│   ├── augment_core.py
-│   ├── bbox_utils.py
-│   ├── classifier_core.py
-│   └── detection_core.py
-├── README.md
-└── requirements.txt
-```
+### 1. Dataset / Augmentación
+Conserva el flujo de augmentación y agrega dos métodos para obtener las bounding boxes:
 
-## Prueba mínima recomendada con monedas
+- `white`: umbral de fondo blanco.
+- `rgb_range`: rango independiente por canal R, G y B.
 
-### 1. Crear clase
+En RGB se configuran:
 
 ```text
-input/
-└── moneda/
-    ├── moneda_01.jpg
-    ├── moneda_02.jpg
-    ├── moneda_03.jpg
-    └── ...
+R min / R max
+G min / G max
+B min / B max
 ```
 
-Las imágenes de entrenamiento deberían contener inicialmente UNA moneda
-por fotografía sobre un fondo lo más uniforme posible.
+La vista previa de la imagen original permite ajustar el rango antes de generar el dataset.
 
-### 2. Generar augmentation
+### 2. Entrenamiento detector
+Incluye únicamente lo relacionado con entrenamiento:
 
-Usa la pestaña:
+- dataset de salida
+- modelo `.pth`
+- épocas
+- batch size
+- learning rate
+- porcentaje de validación
+- seed
+- pesos COCO preentrenados
+- barra de progreso
+- mejor modelo
+- log grande con avance por épocas, precision, recall y F1
 
-`1. Dataset / Augmentación`
-
-El programa genera las imágenes y bounding boxes.
-
-### 3. Entrenar detector
-
-Usa la pestaña:
-
-`3. Detección / Conteo`
-
-Valores iniciales sugeridos:
+### 3. Prueba de conteo
+La prueba se separó del entrenamiento para poder visualizar mucho mejor la imagen.
 
 ```text
-Épocas: 10
-Batch: 2
-Learning rate: 0.0005
-Validación: 0.20
-Seed: 42
-Pesos COCO preentrenados: activado
+┌─────────────────────────────────────┬──────────────────────┐
+│                                     │ Resultado             │
+│                                     │                      │
+│          IMAGEN GRANDE              │ Total                │
+│      + bounding boxes               │ Conteo por clase     │
+│                                     │ Confianzas           │
+│                                     │ BBoxes               │
+└─────────────────────────────────────┴──────────────────────┘
 ```
 
-### 4. Hacer fotografía nueva
+Permite:
 
-Toma una fotografía que NO haya sido usada en entrenamiento.
+- seleccionar una fotografía guardada
+- capturar un frame de webcam
+- capturar y contar
+- ajustar el umbral de confianza
+- ver bounding boxes
+- ver conteo total y por clase
+- ver confianza y coordenadas de cada detección
 
-Ejemplo:
+La webcam continúa siendo opcional.
 
-```text
-foto_prueba.jpg
-- 5 monedas
-- relativamente separadas
-- buena iluminación
-- fondo uniforme
-```
-
-### 5. Probar
-
-En `3. Detección / Conteo`:
-
-1. Seleccionar imagen
-2. Elegir `foto_prueba.jpg`
-3. Presionar `Contar objetos`
-
-La GUI mostrará:
-- bounding boxes
-- confianza de cada detección
-- cantidad por clase
-- total detectado
-
-## Webcam
-
-La sección de webcam se conserva porque se utilizará después, pero es
-completamente opcional. Para las pruebas actuales basta con seleccionar
-fotografías guardadas.
-
-## Importante
-
-El detector puede intentar encontrar varias monedas aunque el dataset inicial
-tenga una moneda por fotografía. Sin embargo, esto es una prueba de concepto.
-
-Para mejorar el conteo posteriormente convendrá entrenar también con imágenes
-que contengan varias monedas y una bounding box por cada moneda.
-
-## Ejecutar
-
-Desde la raíz:
+## Ejecución
 
 ```bash
 pip install -r requirements.txt

@@ -8,18 +8,13 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 
-def detect_bbox_white_background(
-    img: Image.Image,
-    white_threshold: int = 245,
+def _bbox_from_mask(
+    foreground_mask: np.ndarray,
     min_foreground_pixels: int = 50,
 ) -> Optional[list[int]]:
-    arr = np.array(img.convert("RGB"))
-    background_mask = np.all(arr >= white_threshold, axis=2)
-    foreground_mask = ~background_mask
-
     ys, xs = np.where(foreground_mask)
 
-    if len(xs) < min_foreground_pixels or len(ys) < min_foreground_pixels:
+    if len(xs) < min_foreground_pixels:
         return None
 
     x1 = int(xs.min())
@@ -31,6 +26,63 @@ def detect_bbox_white_background(
         return None
 
     return [x1, y1, x2, y2]
+
+
+def detect_bbox_white_background(
+    img: Image.Image,
+    white_threshold: int = 245,
+    min_foreground_pixels: int = 50,
+) -> Optional[list[int]]:
+    arr = np.array(img.convert("RGB"))
+    background_mask = np.all(arr >= white_threshold, axis=2)
+    foreground_mask = ~background_mask
+    return _bbox_from_mask(foreground_mask, min_foreground_pixels)
+
+
+def detect_bbox_rgb_range(
+    img: Image.Image,
+    r_min: int = 0,
+    r_max: int = 240,
+    g_min: int = 0,
+    g_max: int = 240,
+    b_min: int = 0,
+    b_max: int = 240,
+    min_foreground_pixels: int = 50,
+) -> Optional[list[int]]:
+    """Selecciona como objeto los pixeles dentro del cubo RGB indicado."""
+    arr = np.array(img.convert("RGB"))
+
+    foreground_mask = (
+        (arr[:, :, 0] >= r_min) & (arr[:, :, 0] <= r_max) &
+        (arr[:, :, 1] >= g_min) & (arr[:, :, 1] <= g_max) &
+        (arr[:, :, 2] >= b_min) & (arr[:, :, 2] <= b_max)
+    )
+
+    return _bbox_from_mask(foreground_mask, min_foreground_pixels)
+
+
+def detect_bbox_configurable(
+    img: Image.Image,
+    detection_mode: str = "white",
+    white_threshold: int = 245,
+    min_foreground_pixels: int = 50,
+    rgb_min: tuple[int, int, int] = (0, 0, 0),
+    rgb_max: tuple[int, int, int] = (240, 240, 240),
+) -> Optional[list[int]]:
+    if detection_mode == "rgb_range":
+        return detect_bbox_rgb_range(
+            img,
+            r_min=int(rgb_min[0]), r_max=int(rgb_max[0]),
+            g_min=int(rgb_min[1]), g_max=int(rgb_max[1]),
+            b_min=int(rgb_min[2]), b_max=int(rgb_max[2]),
+            min_foreground_pixels=min_foreground_pixels,
+        )
+
+    return detect_bbox_white_background(
+        img,
+        white_threshold=white_threshold,
+        min_foreground_pixels=min_foreground_pixels,
+    )
 
 
 def build_preview_image(
@@ -58,6 +110,9 @@ def save_bbox_metadata(
     class_name: str = "objeto",
     white_threshold: int | None = None,
     min_foreground_pixels: int | None = None,
+    detection_mode: str = "white",
+    rgb_min: tuple[int, int, int] | None = None,
+    rgb_max: tuple[int, int, int] | None = None,
 ) -> None:
     w, h = image_size
     x1, y1, x2, y2 = [float(v) for v in bbox_xyxy]
@@ -80,10 +135,16 @@ def save_bbox_metadata(
         "bbox_xyxy": [x1, y1, x2, y2],
         "bbox_xywh": bbox_xywh,
         "bbox_yolo_cxcywh_normalized": yolo,
+        "detection_mode": detection_mode,
         "white_threshold": white_threshold,
+        "rgb_min": list(rgb_min) if rgb_min is not None else None,
+        "rgb_max": list(rgb_max) if rgb_max is not None else None,
         "min_foreground_pixels": min_foreground_pixels,
     }
-    json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    json_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8"
+    )
 
 
 def load_bbox_metadata(json_path: Path) -> dict:

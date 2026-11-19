@@ -14,9 +14,9 @@ from torchvision.tv_tensors import BoundingBoxFormat
 from tqdm import tqdm
 
 try:
-    from .bbox_utils import detect_bbox_white_background, save_bbox_metadata
+    from .bbox_utils import detect_bbox_configurable, save_bbox_metadata
 except ImportError:
-    from bbox_utils import detect_bbox_white_background, save_bbox_metadata
+    from bbox_utils import detect_bbox_configurable, save_bbox_metadata
 
 
 VALID_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
@@ -96,6 +96,9 @@ def save_class_config_json(
     default_white_threshold: int,
     default_min_foreground_pixels: int,
     class_params: dict[str, dict[str, int]],
+    detection_mode: str = "white",
+    rgb_min: tuple[int, int, int] = (0, 0, 0),
+    rgb_max: tuple[int, int, int] = (240, 240, 240),
 ) -> Path:
     input_dir.mkdir(parents=True, exist_ok=True)
     json_path = get_config_json_path(input_dir)
@@ -104,6 +107,9 @@ def save_class_config_json(
         "default": {
             "white_threshold": int(default_white_threshold),
             "min_foreground_pixels": int(default_min_foreground_pixels),
+            "detection_mode": detection_mode,
+            "rgb_min": [int(v) for v in rgb_min],
+            "rgb_max": [int(v) for v in rgb_max],
         },
         "classes": {
             str(class_name): {
@@ -114,7 +120,10 @@ def save_class_config_json(
         },
     }
 
-    json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    json_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8"
+    )
     return json_path
 
 
@@ -187,6 +196,9 @@ def generate_augmented_dataset_with_bboxes(
     min_foreground_pixels: int = 50,
     enable_hflip: bool = True,
     class_params: dict[str, dict[str, int]] | None = None,
+    detection_mode: str = "white",
+    rgb_min: tuple[int, int, int] = (0, 0, 0),
+    rgb_max: tuple[int, int, int] = (240, 240, 240),
 ) -> dict:
     if not input_dir.exists():
         raise FileNotFoundError(f"La carpeta de entrada no existe: {input_dir}")
@@ -234,10 +246,13 @@ def generate_augmented_dataset_with_bboxes(
             img = ensure_rgb(img)
             w, h = img.size
 
-            bbox = detect_bbox_white_background(
+            bbox = detect_bbox_configurable(
                 img,
+                detection_mode=detection_mode,
                 white_threshold=class_white_threshold,
-                min_foreground_pixels=class_min_fg
+                min_foreground_pixels=class_min_fg,
+                rgb_min=rgb_min,
+                rgb_max=rgb_max,
             )
             if bbox is None:
                 skipped.append(str(image_path))
@@ -260,6 +275,9 @@ def generate_augmented_dataset_with_bboxes(
                 class_name=class_name,
                 white_threshold=class_white_threshold,
                 min_foreground_pixels=class_min_fg,
+                detection_mode=detection_mode,
+                rgb_min=rgb_min,
+                rgb_max=rgb_max,
             )
             bbox_json_files.append(str(orig_bbox_json.resolve()))
 
@@ -271,11 +289,7 @@ def generate_augmented_dataset_with_bboxes(
             labels = torch.tensor([class_id], dtype=torch.int64)
 
             for i in range(1, copies_per_image + 1):
-                target = {
-                    "boxes": boxes,
-                    "labels": labels,
-                }
-
+                target = {"boxes": boxes, "labels": labels}
                 aug_img, aug_target = transform(img, target)
                 aug_boxes = aug_target["boxes"]
                 aug_labels = aug_target["labels"]
@@ -284,7 +298,6 @@ def generate_augmented_dataset_with_bboxes(
                     continue
 
                 aug_bbox = [float(x) for x in aug_boxes[0].tolist()]
-
                 out_name = f"{stem}_aug_{i:03d}{suffix}"
                 out_img_path = augmented_images_dir / rel_folder / out_name
                 aug_img.save(out_img_path, quality=95)
@@ -300,6 +313,9 @@ def generate_augmented_dataset_with_bboxes(
                     class_name=class_name,
                     white_threshold=class_white_threshold,
                     min_foreground_pixels=class_min_fg,
+                    detection_mode=detection_mode,
+                    rgb_min=rgb_min,
+                    rgb_max=rgb_max,
                 )
                 bbox_json_files.append(str(out_bbox_json.resolve()))
 
@@ -319,6 +335,9 @@ def generate_augmented_dataset_with_bboxes(
         "class_to_id": class_to_id,
         "skipped_images": skipped,
         "manifest_path": str(manifest_path),
+        "detection_mode": detection_mode,
+        "rgb_min": list(rgb_min),
+        "rgb_max": list(rgb_max),
     }
 
 
