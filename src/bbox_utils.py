@@ -56,6 +56,8 @@ def save_bbox_metadata(
     bbox_xyxy: list[float] | list[int],
     class_id: int = 0,
     class_name: str = "objeto",
+    white_threshold: int | None = None,
+    min_foreground_pixels: int | None = None,
 ) -> None:
     w, h = image_size
     x1, y1, x2, y2 = [float(v) for v in bbox_xyxy]
@@ -78,6 +80,8 @@ def save_bbox_metadata(
         "bbox_xyxy": [x1, y1, x2, y2],
         "bbox_xywh": bbox_xywh,
         "bbox_yolo_cxcywh_normalized": yolo,
+        "white_threshold": white_threshold,
+        "min_foreground_pixels": min_foreground_pixels,
     }
     json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 

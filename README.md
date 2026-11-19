@@ -1,14 +1,14 @@
-# Visbra / Kount-A — v1.4.0
+# Visbra / Kount-A — v1.5.0
 
 **Reconstrucción documental de la entrega histórica de Visbra.**
 
-- **Etiqueta técnica:** `v1.4.0`
+- **Etiqueta técnica:** `v1.5.0`
 - **Etapa:** 1 de 3
-- **Versión original del proyecto:** 4
+- **Versión original del proyecto:** 5
 - **Revisión documentada:** 0
-- **Cambio principal:** Primer entorno gráfico de aumento de imágenes y BBox sobre fondo claro.
-- **Procedencia:** `augment_gui_project`
-- **Nota:** Entrega base sin numeración explícita: asignación v4 inferida por orden y funciones frente a v5.
+- **Cambio principal:** Ventana de notas, recarga de vista previa y configuración de umbrales por clase.
+- **Procedencia:** `augment_gui_project_v5`
+- **Nota:** READMEs y código del directorio v5.
 
 La numeración de GitHub es una convención documental personalizada, **no implica compatibilidad con versionado semántico estándar**. Los commits y las etiquetas fueron reconstruidos a partir de archivos proporcionados y **no representan fechas originales de desarrollo**.
 

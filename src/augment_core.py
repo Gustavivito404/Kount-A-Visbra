@@ -18,6 +18,7 @@ from bbox_utils import detect_bbox_white_background, save_bbox_metadata
 
 VALID_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 MANIFEST_NAME = ".aug_manifest.json"
+ROOT_CLASS_NAME = "__root__"
 
 
 def set_seed(seed: int) -> None:
@@ -41,6 +42,45 @@ def ensure_rgb(img: Image.Image) -> Image.Image:
 
 def relative_class_folder(input_dir: Path, image_path: Path) -> Path:
     return image_path.parent.relative_to(input_dir)
+
+
+def get_class_name(input_dir: Path, image_path: Path) -> str:
+    rel = image_path.relative_to(input_dir)
+    if len(rel.parts) <= 1:
+        return ROOT_CLASS_NAME
+    return rel.parts[0]
+
+
+def get_class_names(input_dir: Path) -> list[str]:
+    if not input_dir.exists():
+        return []
+
+    class_names = []
+    for img_path in find_images(input_dir):
+        cls = get_class_name(input_dir, img_path)
+        class_names.append(cls)
+
+    return sorted(set(class_names))
+
+
+def build_class_to_id_map(input_dir: Path) -> dict[str, int]:
+    class_names = get_class_names(input_dir)
+    return {name: idx for idx, name in enumerate(class_names)}
+
+
+def resolve_class_params(
+    class_name: str,
+    class_params: dict[str, dict[str, int]] | None,
+    default_white_threshold: int,
+    default_min_foreground_pixels: int,
+) -> tuple[int, int]:
+    if class_params and class_name in class_params:
+        data = class_params[class_name]
+        white_threshold = int(data.get("white_threshold", default_white_threshold))
+        min_fg = int(data.get("min_foreground_pixels", default_min_foreground_pixels))
+        return white_threshold, min_fg
+
+    return default_white_threshold, default_min_foreground_pixels
 
 
 def save_manifest(
@@ -98,6 +138,7 @@ def generate_augmented_dataset_with_bboxes(
     white_threshold: int = 245,
     min_foreground_pixels: int = 50,
     enable_hflip: bool = True,
+    class_params: dict[str, dict[str, int]] | None = None,
 ) -> dict:
     if not input_dir.exists():
         raise FileNotFoundError(f"La carpeta de entrada no existe: {input_dir}")
@@ -105,6 +146,8 @@ def generate_augmented_dataset_with_bboxes(
     images = find_images(input_dir)
     if not images:
         raise ValueError(f"No se encontraron imágenes válidas en: {input_dir}")
+
+    class_to_id = build_class_to_id_map(input_dir)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     original_images_dir = output_dir / "original_images"
@@ -130,14 +173,23 @@ def generate_augmented_dataset_with_bboxes(
         (augmented_images_dir / rel_folder).mkdir(parents=True, exist_ok=True)
         (augmented_labels_dir / rel_folder).mkdir(parents=True, exist_ok=True)
 
+        class_name = get_class_name(input_dir, image_path)
+        class_id = class_to_id[class_name]
+        class_white_threshold, class_min_fg = resolve_class_params(
+            class_name=class_name,
+            class_params=class_params,
+            default_white_threshold=white_threshold,
+            default_min_foreground_pixels=min_foreground_pixels,
+        )
+
         with Image.open(image_path) as img:
             img = ensure_rgb(img)
             w, h = img.size
 
             bbox = detect_bbox_white_background(
                 img,
-                white_threshold=white_threshold,
-                min_foreground_pixels=min_foreground_pixels
+                white_threshold=class_white_threshold,
+                min_foreground_pixels=class_min_fg
             )
             if bbox is None:
                 skipped.append(str(image_path))
@@ -156,8 +208,10 @@ def generate_augmented_dataset_with_bboxes(
                 image_filename=original_copy_path.name,
                 image_size=(w, h),
                 bbox_xyxy=bbox,
-                class_id=0,
-                class_name="objeto"
+                class_id=class_id,
+                class_name=class_name,
+                white_threshold=class_white_threshold,
+                min_foreground_pixels=class_min_fg,
             )
             bbox_json_files.append(str(orig_bbox_json.resolve()))
 
@@ -166,7 +220,7 @@ def generate_augmented_dataset_with_bboxes(
                 format=BoundingBoxFormat.XYXY,
                 canvas_size=(h, w),
             )
-            labels = torch.tensor([0], dtype=torch.int64)
+            labels = torch.tensor([class_id], dtype=torch.int64)
 
             for i in range(1, copies_per_image + 1):
                 target = {
@@ -195,7 +249,9 @@ def generate_augmented_dataset_with_bboxes(
                     image_size=aug_img.size,
                     bbox_xyxy=aug_bbox,
                     class_id=int(aug_labels[0].item()),
-                    class_name="objeto"
+                    class_name=class_name,
+                    white_threshold=class_white_threshold,
+                    min_foreground_pixels=class_min_fg,
                 )
                 bbox_json_files.append(str(out_bbox_json.resolve()))
 
@@ -212,6 +268,7 @@ def generate_augmented_dataset_with_bboxes(
         "copied_original_images": len(set(copied_original_files)),
         "augmented_images_created": len(generated_files),
         "label_files_created": len(set(bbox_json_files)),
+        "class_to_id": class_to_id,
         "skipped_images": skipped,
         "manifest_path": str(manifest_path),
     }
