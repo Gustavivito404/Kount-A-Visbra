@@ -1,0 +1,33 @@
+# Datos y configuraciones locales (no publicar)
+config/users.json
+**/users.json
+**/work_sequence.json
+**/session_state.json
+**/last_session.json
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+*.db
+*.sqlite
+*.sqlite3
+# Datasets y pesos de modelos
+datasets/
+dataset/
+runs/
+weights/
+*.pt
+*.pth
+*.onnx
+*.engine
+# Entorno local
+.venv/
+venv/
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
