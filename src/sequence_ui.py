@@ -8,16 +8,14 @@ import tkinter as tk
 from tkinter import ttk, messagebox, colorchooser
 
 from .esp32_link import ESP32Link
-from .sequence_core import SequenceStore, validate_step, describe, KIND_LABELS
-
-
-# Pausa adicional entre instrucciones consecutivas de una misma secuencia.
-# No modifica la duración individual de los movimientos.
-PAUSA_ENTRE_INSTRUCCIONES_S = 3.0
+from .sequence_core import SequenceStore, validate_step, describe, KIND_LABELS, DEFAULT_STEP_DELAY_S
 
 
 class SequenceUIMixin:
     def _esp_init_ui_state(self):
+        # Este valor se guarda dentro de work_sequence.json de cada perfil.
+        self.sequence_delay = tk.StringVar(value=f'{DEFAULT_STEP_DELAY_S:g}')
+        self.sequence_delay.trace_add('write', self._seq_delay_changed)
         self.esp_connection_text = tk.StringVar(value='ESP32: sin comprobar')
         self._esp_lamps = []
         self._esp_connected = False
@@ -114,14 +112,26 @@ class SequenceUIMixin:
     def _sequence_store(self):
         return SequenceStore(self.profiles.profile_dir(self.active_profile['id']))
 
+    def _seq_delay_changed(self, *_):
+        if not getattr(self, '_sequence_loading', False) and self.active_profile and self._engineering_view():
+            self.sequence_dirty = True
+            self._refresh_sequence_tree()
+
     def _load_sequence(self):
         self.sequence_steps = []
         self.sequence_dirty = False
-        if self.active_profile:
-            try:
-                self.sequence_steps = self._sequence_store().load()
-            except (ValueError, OSError, TypeError) as exc:
-                self.status_var.set('Secuencia: ' + str(exc))
+        self._sequence_loading = True
+        try:
+            self.sequence_delay.set(f'{DEFAULT_STEP_DELAY_S:g}')
+            if self.active_profile:
+                try:
+                    store = self._sequence_store()
+                    self.sequence_steps = store.load()
+                    self.sequence_delay.set(f'{store.load_delay():g}')
+                except (ValueError, OSError, TypeError) as exc:
+                    self.status_var.set('Secuencia: ' + str(exc))
+        finally:
+            self._sequence_loading = False
         self._refresh_sequence_tree()
 
     def _refresh_sequence_tree(self):
@@ -148,6 +158,9 @@ class SequenceUIMixin:
         for label, callback in tools:
             ttk.Button(sidebar, text=label, command=callback,
                        style='Primary.TButton' if label == 'Guardar secuencia' else 'TButton').pack(fill='x', pady=4)
+        ttk.Label(sidebar, text='Pausa entre instrucciones (s):', wraplength=145).pack(anchor='w', pady=(10, 3))
+        ttk.Entry(sidebar, textvariable=self.sequence_delay, width=10).pack(fill='x', pady=(0, 2))
+        ttk.Label(sidebar, text='De 0 a 60 s. Se guarda por perfil.', wraplength=145).pack(anchor='w')
         ttk.Separator(sidebar).pack(fill='x', pady=12)
         ttk.Label(sidebar, text='Perfil activo:', wraplength=140).pack(anchor='w')
         self.sequence_profile_label = ttk.Label(sidebar, text=self.active_profile['name'] if self.active_profile else 'Sin perfil', wraplength=140)
@@ -232,7 +245,8 @@ class SequenceUIMixin:
     def _seq_save(self):
         if not self.active_profile or self._sequence_busy(): return False
         try:
-            path = self._sequence_store().save(self.sequence_steps)
+            delay_s = SequenceStore.validate_delay(self.sequence_delay.get().strip().replace(',', '.'))
+            path = self._sequence_store().save(self.sequence_steps, delay_s=delay_s)
             self.sequence_dirty = False
             self._refresh_sequence_tree()
             self.status_var.set('Secuencia guardada en perfil: ' + str(path))
@@ -365,8 +379,15 @@ class SequenceUIMixin:
         if self._engineering_view():
             if self.sequence_dirty and not self._seq_save(): return
             steps = list(self.sequence_steps)
+            try:
+                step_delay_s = SequenceStore.validate_delay(self.sequence_delay.get().strip().replace(',', '.'))
+            except ValueError as exc:
+                messagebox.showerror('Pausa de secuencia', str(exc)); return
         else:
-            try: steps = self._sequence_store().load()
+            try:
+                store = self._sequence_store()
+                steps = store.load()
+                step_delay_s = store.load_delay()
             except Exception as exc:
                 messagebox.showerror('Secuencia', str(exc)); return
         if not steps:
@@ -433,8 +454,8 @@ class SequenceUIMixin:
                     if i < len(steps):
                         self._emit('sequence_progress',
                                    f'Paso {i}/{len(steps)} completado · '
-                                   f'Pausa de {PAUSA_ENTRE_INSTRUCCIONES_S:g} s antes del siguiente…')
-                        if self._sequence_stop_event.wait(PAUSA_ENTRE_INSTRUCCIONES_S):
+                                   f'Pausa de {step_delay_s:g} s antes del siguiente…')
+                        if self._sequence_stop_event.wait(step_delay_s):
                             raise InterruptedError('Secuencia detenida durante la pausa.')
                 self._emit('sequence_complete', 'Secuencia completada.')
             except InterruptedError as exc:

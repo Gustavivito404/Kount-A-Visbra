@@ -420,6 +420,7 @@ class KountApp(SequenceUIMixin, LiveUIMixin, tk.Tk):
             self.test_popup.destroy()
             self.test_popup=None
             self.test_popup_canvas=None
+        self._close_test_details_preview()
         self.workspace.destroy()
         visible=self._visible_profiles()
         if not self.active_profile or self.active_profile['id'] not in {p['id'] for p in visible}:
@@ -503,6 +504,7 @@ class KountApp(SequenceUIMixin, LiveUIMixin, tk.Tk):
             self.test_popup.destroy()
             self.test_popup=None
             self.test_popup_canvas=None
+        self._close_test_details_preview()
         self.workspace.destroy()
         self.username=self.role=None
         self.active_profile=None
@@ -1351,12 +1353,16 @@ class KountApp(SequenceUIMixin, LiveUIMixin, tk.Tk):
         result=ttk.LabelFrame(sidebar,text='Conteo por clase y detalles' if not operator else 'Resultados del lote',padding=7)
         result.grid(row=1,column=0,sticky='nsew',pady=(5,0))
         result.columnconfigure(0,weight=1)
-        result.rowconfigure(1,weight=1)
+        result.rowconfigure(2,weight=1)
+        details_toolbar=ttk.Frame(result)
+        details_toolbar.grid(row=0,column=0,sticky='ew',pady=(0,3))
+        ttk.Button(details_toolbar,text='Ampliar resultados ↗',
+                   command=self._open_test_details_preview).pack(side='right')
         self.test_summary=tk.StringVar(value='Listo para comenzar.' if operator else 'Sin conteo.')
         ttk.Label(result,textvariable=self.test_summary,font=('Segoe UI',12,'bold'),
-                  wraplength=260).grid(row=0,column=0,sticky='ew',pady=(1,5))
+                  wraplength=260).grid(row=1,column=0,sticky='ew',pady=(1,5))
         self.test_details=tk.Text(result,state='disabled',wrap='word',width=25,height=9)
-        self.test_details.grid(row=1,column=0,sticky='nsew')
+        self.test_details.grid(row=2,column=0,sticky='nsew')
 
         show=ttk.LabelFrame(tab,text='Fotografía y detecciones',padding=5)
         show.grid(row=0,column=1,sticky='nsew',padx=(1,2),pady=2)
@@ -1404,6 +1410,45 @@ class KountApp(SequenceUIMixin, LiveUIMixin, tk.Tk):
             self.test_model_caption.set('Modelo: '+(basename if len(basename)<=30 else basename[:27]+'…'))
         else:
             self.test_model_caption.set('Modelo: sin seleccionar')
+
+    def _open_test_details_preview(self):
+        """Abrir estadísticas completas y mantenerlas actualizadas con cada conteo."""
+        popup = getattr(self, 'test_details_popup', None)
+        if popup is not None and popup.winfo_exists():
+            popup.lift()
+            popup.focus_set()
+            return
+        popup = tk.Toplevel(self)
+        popup.title('Kount-A · Conteo, mediciones y detalles')
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        popup.geometry(f'{min(900, max(480, sw-100))}x{min(800, max(400, sh-100))}')
+        popup.minsize(380, 280)
+        popup.configure(bg=self._palette()['bg'])
+        self.test_details_popup = popup
+        body = ttk.Frame(popup, padding=12)
+        body.pack(fill='both', expand=True)
+        ttk.Label(body, text='Resultados de inspección', font=('Segoe UI', 14, 'bold')).pack(anchor='w')
+        ttk.Label(body, textvariable=self.test_summary, font=('Segoe UI', 12, 'bold')).pack(anchor='w', pady=(6, 9))
+        area = ttk.Frame(body)
+        area.pack(fill='both', expand=True)
+        area.columnconfigure(0, weight=1)
+        area.rowconfigure(0, weight=1)
+        self.test_details_popup_text = tk.Text(area, wrap='word', state='disabled',
+                                                font=('Consolas', 11), padx=12, pady=10)
+        self.test_details_popup_text.grid(row=0, column=0, sticky='nsew')
+        scrollbar = ttk.Scrollbar(area, orient='vertical', command=self.test_details_popup_text.yview)
+        scrollbar.grid(row=0, column=1, sticky='ns')
+        self.test_details_popup_text.configure(yscrollcommand=scrollbar.set)
+        self._set_text(self.test_details_popup_text, self.test_details.get('1.0', 'end-1c'))
+        self._recolor_tk(popup)
+        popup.protocol('WM_DELETE_WINDOW', self._close_test_details_preview)
+
+    def _close_test_details_preview(self):
+        popup = getattr(self, 'test_details_popup', None)
+        self.test_details_popup = None
+        self.test_details_popup_text = None
+        if popup is not None and popup.winfo_exists():
+            popup.destroy()
 
     def _open_test_preview(self):
         if self.test_image is None and self.test_display_image is None:
@@ -2408,12 +2453,16 @@ class KountApp(SequenceUIMixin, LiveUIMixin, tk.Tk):
         finally:
             self.after(100, self._poll_queue)
 
-    @staticmethod
-    def _set_text(widget: tk.Text, value: str):
+    def _set_text(self, widget: tk.Text, value: str):
         widget.configure(state='normal')
         widget.delete('1.0', 'end')
         widget.insert('1.0', value)
         widget.configure(state='disabled')
+        # La ventana ampliada sigue el conteo en vivo y las mediciones ArUco.
+        if widget is getattr(self, 'test_details', None):
+            expanded = getattr(self, 'test_details_popup_text', None)
+            if expanded is not None and expanded.winfo_exists():
+                self._set_text(expanded, value)
 
     def _load_operational_config(self):
         """Load only equipment settings; never force an unapproved profile for operators."""

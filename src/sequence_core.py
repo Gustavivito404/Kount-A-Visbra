@@ -1,9 +1,11 @@
 """Validated, per-profile sequence persistence. No hardware side effects."""
 from __future__ import annotations
 import json
+import math
 from pathlib import Path
 
 KIND_LABELS = {'motor': 'Movimiento de motor', 'led': 'Iluminación LED', 'camera': 'Cámara'}
+DEFAULT_STEP_DELAY_S = 3.0
 
 
 def validate_step(step: dict) -> dict:
@@ -63,12 +65,33 @@ class SequenceStore:
             raise ValueError('Secuencia excesivamente larga (máximo 500 pasos).')
         return [validate_step(item) for item in data['steps']]
 
-    def save(self, steps: list[dict]) -> Path:
+    def load_delay(self) -> float:
+        """Pausa configurada por perfil; archivos antiguos usan 3 segundos."""
+        if not self.path.is_file():
+            return DEFAULT_STEP_DELAY_S
+        data = json.loads(self.path.read_text(encoding='utf-8'))
+        if not isinstance(data, dict) or data.get('format_version') != 1:
+            raise ValueError('Formato de secuencia inválido.')
+        return self.validate_delay(data.get('delay_between_steps_s', DEFAULT_STEP_DELAY_S))
+
+    @staticmethod
+    def validate_delay(value) -> float:
+        try:
+            delay = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError('La pausa debe ser un número en segundos.') from exc
+        if not math.isfinite(delay) or not 0 <= delay <= 60:
+            raise ValueError('La pausa entre instrucciones debe estar entre 0 y 60 segundos.')
+        return round(delay, 2)
+
+    def save(self, steps: list[dict], delay_s: float = DEFAULT_STEP_DELAY_S) -> Path:
         if len(steps) > 500:
             raise ValueError('Se permiten hasta 500 pasos.')
         cleaned = [validate_step(item) for item in steps]
+        delay_s = self.validate_delay(delay_s)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temp = self.path.with_suffix('.json.tmp')
-        temp.write_text(json.dumps({'format_version': 1, 'steps': cleaned}, ensure_ascii=False, indent=2), encoding='utf-8')
+        temp.write_text(json.dumps({'format_version': 1, 'steps': cleaned,
+                                    'delay_between_steps_s': delay_s}, ensure_ascii=False, indent=2), encoding='utf-8')
         temp.replace(self.path)
         return self.path
