@@ -1,0 +1,35 @@
+% Integrar estos fragmentos en el capítulo 3, adaptando la numeración del documento.
+% Agregar en el preámbulo: \usepackage{graphicx}
+% Para PDF de página amplia, evaluar \usepackage{rotating} y sidewaysfigure.
+
+\subsubsection{Evolución del software Visbra}
+
+El desarrollo del software Visbra se realizó mediante iteraciones sucesivas orientadas a incrementar sus capacidades de procesamiento visual e integración. En las primeras etapas se implementaron herramientas de preparación y transformación de imágenes y se exploraron modelos de clasificación; posteriormente se incorporaron métodos de detección multiobjeto y conteo, hasta integrar modelos YOLO y herramientas de etiquetado multiclase. Finalmente, se añadieron funciones de administración de perfiles, medición mediante ArUco, adquisición de video en tiempo real y secuencias configurables para coordinar la inspección con los actuadores de Kount-A.
+
+Para documentar esta evolución se distinguen tres avances: preparación del entorno visual y clasificación, implementación de detección y entrenamiento, e integración del sistema de inspección y control. La evolución se reconstruyó mediante los respaldos disponibles, sin asignar fechas históricas a commits reconstruidos; la versión 7 carece de un respaldo independiente y la numeración inicial de la versión 4 es provisional.
+
+\subsubsection{Diagrama de flujo del funcionamiento de Visbra}
+
+El diagrama de flujo sintetiza las rutas principales del software, incluyendo la autenticación, selección de perfiles, preparación del conjunto de datos, ejecución de secuencias y procesamiento de imágenes. En las instrucciones de inspección se consideran los modos automático y manual, la inferencia mediante YOLO y las validaciones espaciales y dimensionales mediante ArUco. La operación secuencial incorpora decisiones de comunicación con el sistema embebido y condiciones de interrupción o fallo.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figuras/01_flujo_integral_KountA_v16.pdf}
+    \caption{Diagrama de flujo del software Visbra para la operación de Kount-A. Elaboración propia a partir de la implementación de la versión 16.}
+    \label{fig:visbra_flujo_v16}
+\end{figure}
+
+\subsubsection{Diagrama UML de clases principales}
+
+El diagrama UML identifica las clases principales de la aplicación y sus relaciones con los módulos de adquisición de imágenes, ejecución de secuencias, administración de perfiles y usuarios, comunicación con la ESP32 y análisis visual. Se representa la integración de los componentes de la interfaz mediante herencia y las dependencias utilizadas para almacenar configuraciones, ejecutar inferencias y coordinar los dispositivos del prototipo.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figuras/02_uml_clases_Visbra_v16.pdf}
+    \caption{Diagrama UML de las clases y dependencias principales del software Visbra. Elaboración propia a partir del código fuente de la versión 16.}
+    \label{fig:visbra_uml_v16}
+\end{figure}
+
+% NOTA: Dada la cantidad de elementos, puede ser preferible colocar las
+% figuras en páginas apaisadas (sidewaysfigure), o dividir su explicación
+% textual en el capítulo y reservar las imágenes completas en anexos.
