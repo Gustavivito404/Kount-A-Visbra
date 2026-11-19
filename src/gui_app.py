@@ -34,6 +34,15 @@ try:
         predict_image,
         train_classifier,
     )
+    from .detection_core import (
+        DEFAULT_DETECTOR_MODEL_NAME,
+        capture_webcam_image,
+        draw_detections,
+        load_detector_metadata,
+        predict_image_file,
+        predict_pil_image,
+        train_detector,
+    )
 except ImportError:
     # También permite:
     # python src/gui_app.py
@@ -59,6 +68,15 @@ except ImportError:
         load_checkpoint_metadata,
         predict_image,
         train_classifier,
+    )
+    from detection_core import (
+        DEFAULT_DETECTOR_MODEL_NAME,
+        capture_webcam_image,
+        draw_detections,
+        load_detector_metadata,
+        predict_image_file,
+        predict_pil_image,
+        train_detector,
     )
 
 
@@ -125,7 +143,7 @@ class NotesWindow(tk.Toplevel):
 class AugmentApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Augment Dataset + Clasificador v10")
+        self.title("Augment Dataset + IA v11 - Pruebas por imagen")
         self.geometry("1420x830")
         self.minsize(1280, 760)
 
@@ -165,6 +183,26 @@ class AugmentApp(tk.Tk):
         self.nn_test_preview_photo = None
         self.nn_training = False
 
+        # Detector / conteo (v11)
+        self.det_epochs_var = tk.StringVar(value="10")
+        self.det_batch_var = tk.StringVar(value="2")
+        self.det_lr_var = tk.StringVar(value="0.0005")
+        self.det_val_fraction_var = tk.StringVar(value="0.20")
+        self.det_seed_var = tk.StringVar(value="42")
+        self.det_pretrained_var = tk.BooleanVar(value=True)
+        self.det_confidence_var = tk.StringVar(value="0.50")
+        self.det_model_path_var = tk.StringVar()
+        self.det_image_path_var = tk.StringVar()
+        self.det_camera_index_var = tk.StringVar(value="0")
+        self.det_camera_width_var = tk.StringVar(value="1280")
+        self.det_camera_height_var = tk.StringVar(value="720")
+        self.det_status_var = tk.StringVar(value="Listo para entrenar detector.")
+        self.det_result_var = tk.StringVar(value="Sin conteo.")
+        self.det_model_info_var = tk.StringVar(value="Sin detector cargado.")
+        self.det_preview_photo = None
+        self.det_current_pil_image = None
+        self.det_training = False
+
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.after(80, self.initialize_from_session)
@@ -175,7 +213,7 @@ class AugmentApp(tk.Tk):
 
         ttk.Label(
             container,
-            text="Augment Dataset + Clasificador de imágenes",
+            text="Augment Dataset + Clasificación + Detección / Conteo v11",
             font=("Segoe UI", 12, "bold")
         ).pack(anchor="w", pady=(0, 10))
 
@@ -184,9 +222,11 @@ class AugmentApp(tk.Tk):
 
         augment_tab = ttk.Frame(self.notebook, padding=4)
         classifier_tab = ttk.Frame(self.notebook, padding=4)
+        detector_tab = ttk.Frame(self.notebook, padding=4)
 
         self.notebook.add(augment_tab, text="1. Dataset / Augmentación")
-        self.notebook.add(classifier_tab, text="2. Red neuronal / Prueba")
+        self.notebook.add(classifier_tab, text="2. Clasificación / Prueba")
+        self.notebook.add(detector_tab, text="3. Detección / Conteo")
 
         main = ttk.Panedwindow(augment_tab, orient="horizontal")
         main.pack(fill="both", expand=True)
@@ -204,6 +244,7 @@ class AugmentApp(tk.Tk):
         self._build_right_panel(right)
 
         self._build_classifier_tab(classifier_tab)
+        self._build_detector_tab(detector_tab)
 
 
     def _build_left_panel(self, parent: ttk.Frame) -> None:
@@ -779,6 +820,908 @@ class AugmentApp(tk.Tk):
         finally:
             self.after(0, lambda: self.nn_predict_button.configure(state="normal"))
 
+    def _build_detector_tab(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(1, weight=1)
+        parent.rowconfigure(1, weight=1)
+
+        train_frame = ttk.LabelFrame(
+            parent,
+            text="Entrenamiento del detector de objetos",
+            padding=12
+        )
+        train_frame.grid(
+            row=0, column=0, columnspan=2,
+            sticky="ew", padx=6, pady=6
+        )
+        train_frame.columnconfigure(1, weight=1)
+        train_frame.columnconfigure(3, weight=1)
+
+        ttk.Label(
+            train_frame,
+            text=(
+                "Usa las mismas imágenes y bounding boxes generadas por la "
+                "pestaña 1. Puedes entrenar una sola clase, por ejemplo 'moneda', "
+                "y después seleccionar una fotografía con varias monedas para "
+                "detectar cada una y contarlas."
+            ),
+            justify="left",
+            wraplength=1200,
+        ).grid(
+            row=0, column=0, columnspan=4,
+            sticky="w", pady=(0, 10)
+        )
+
+        ttk.Label(train_frame, text="Dataset (output actual)").grid(
+            row=1, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(
+            train_frame,
+            textvariable=self.output_dir_var,
+            state="readonly",
+            width=55
+        ).grid(
+            row=1, column=1, columnspan=3,
+            sticky="ew", padx=6
+        )
+
+        ttk.Label(train_frame, text="Guardar detector (.pth)").grid(
+            row=2, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(
+            train_frame,
+            textvariable=self.det_model_path_var
+        ).grid(
+            row=2, column=1, columnspan=2,
+            sticky="ew", padx=6
+        )
+        ttk.Button(
+            train_frame,
+            text="Elegir ruta",
+            command=self.select_detector_model_path
+        ).grid(row=2, column=3, sticky="e")
+
+        ttk.Label(train_frame, text="Épocas").grid(
+            row=3, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(
+            train_frame,
+            textvariable=self.det_epochs_var,
+            width=10
+        ).grid(row=3, column=1, sticky="w", padx=6)
+
+        ttk.Label(train_frame, text="Batch size").grid(
+            row=3, column=2, sticky="w", pady=4
+        )
+        ttk.Entry(
+            train_frame,
+            textvariable=self.det_batch_var,
+            width=10
+        ).grid(row=3, column=3, sticky="w", padx=6)
+
+        ttk.Label(train_frame, text="Learning rate").grid(
+            row=4, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(
+            train_frame,
+            textvariable=self.det_lr_var,
+            width=10
+        ).grid(row=4, column=1, sticky="w", padx=6)
+
+        ttk.Label(train_frame, text="Validación (0-1)").grid(
+            row=4, column=2, sticky="w", pady=4
+        )
+        ttk.Entry(
+            train_frame,
+            textvariable=self.det_val_fraction_var,
+            width=10
+        ).grid(row=4, column=3, sticky="w", padx=6)
+
+        ttk.Label(train_frame, text="Seed").grid(
+            row=5, column=0, sticky="w", pady=4
+        )
+        ttk.Entry(
+            train_frame,
+            textvariable=self.det_seed_var,
+            width=10
+        ).grid(row=5, column=1, sticky="w", padx=6)
+
+        ttk.Checkbutton(
+            train_frame,
+            text="Usar pesos COCO preentrenados (recomendado)",
+            variable=self.det_pretrained_var
+        ).grid(
+            row=5, column=2, columnspan=2,
+            sticky="w", padx=6
+        )
+
+        controls = ttk.Frame(train_frame)
+        controls.grid(
+            row=6, column=0, columnspan=4,
+            sticky="ew", pady=(10, 4)
+        )
+
+        self.det_train_button = ttk.Button(
+            controls,
+            text="Entrenar detector",
+            command=self.start_detector_training
+        )
+        self.det_train_button.pack(side="left")
+
+        ttk.Button(
+            controls,
+            text="Usar ruta recomendada",
+            command=self.sync_detector_model_path
+        ).pack(side="left", padx=8)
+
+        ttk.Button(
+            controls,
+            text="Leer información del detector",
+            command=self.refresh_detector_model_info
+        ).pack(side="left")
+
+        self.det_progress = ttk.Progressbar(
+            train_frame,
+            orient="horizontal",
+            mode="determinate",
+            maximum=100
+        )
+        self.det_progress.grid(
+            row=7, column=0, columnspan=4,
+            sticky="ew", pady=(8, 4)
+        )
+
+        ttk.Label(
+            train_frame,
+            textvariable=self.det_status_var
+        ).grid(
+            row=8, column=0, columnspan=4,
+            sticky="w", pady=(4, 0)
+        )
+
+        ttk.Label(
+            train_frame,
+            textvariable=self.det_model_info_var,
+            justify="left"
+        ).grid(
+            row=9, column=0, columnspan=4,
+            sticky="w", pady=(4, 0)
+        )
+
+        # -------------------------------------------------------------
+        # Vista / captura
+        # -------------------------------------------------------------
+        image_frame = ttk.LabelFrame(
+            parent,
+            text="Prueba de conteo con imagen",
+            padding=12
+        )
+        image_frame.grid(
+            row=1, column=0,
+            sticky="nsew", padx=6, pady=6
+        )
+        image_frame.columnconfigure(0, weight=1)
+        image_frame.rowconfigure(5, weight=1)
+
+        file_controls = ttk.Frame(image_frame)
+        file_controls.grid(row=0, column=0, sticky="ew")
+
+        ttk.Button(
+            file_controls,
+            text="Seleccionar imagen",
+            command=self.select_detector_test_image
+        ).pack(side="left")
+
+        ttk.Button(
+            file_controls,
+            text="Contar objetos",
+            command=self.start_detector_prediction
+        ).pack(side="left", padx=8)
+
+        ttk.Button(
+            file_controls,
+            text="Limpiar prueba",
+            command=self.clear_detector_test
+        ).pack(side="left")
+
+        ttk.Label(
+            image_frame,
+            textvariable=self.det_image_path_var,
+            wraplength=620
+        ).grid(
+            row=1, column=0,
+            sticky="w", pady=(8, 8)
+        )
+
+        webcam = ttk.LabelFrame(
+            image_frame,
+            text="Webcam (opcional / para después)",
+            padding=8
+        )
+        webcam.grid(
+            row=2, column=0,
+            sticky="ew", pady=(0, 8)
+        )
+
+        ttk.Label(webcam, text="Cámara").pack(side="left")
+        ttk.Entry(
+            webcam,
+            textvariable=self.det_camera_index_var,
+            width=5
+        ).pack(side="left", padx=(4, 10))
+
+        ttk.Label(webcam, text="Ancho").pack(side="left")
+        ttk.Entry(
+            webcam,
+            textvariable=self.det_camera_width_var,
+            width=7
+        ).pack(side="left", padx=(4, 10))
+
+        ttk.Label(webcam, text="Alto").pack(side="left")
+        ttk.Entry(
+            webcam,
+            textvariable=self.det_camera_height_var,
+            width=7
+        ).pack(side="left", padx=(4, 10))
+
+        ttk.Button(
+            webcam,
+            text="Capturar frame",
+            command=self.start_webcam_capture
+        ).pack(side="left", padx=6)
+
+        ttk.Button(
+            webcam,
+            text="Capturar y contar",
+            command=self.start_webcam_capture_and_count
+        ).pack(side="left")
+
+        conf_frame = ttk.Frame(image_frame)
+        conf_frame.grid(
+            row=3, column=0,
+            sticky="ew", pady=(0, 6)
+        )
+
+        ttk.Label(
+            conf_frame,
+            text="Confianza mínima:"
+        ).pack(side="left")
+
+        ttk.Entry(
+            conf_frame,
+            textvariable=self.det_confidence_var,
+            width=8
+        ).pack(side="left", padx=6)
+
+        ttk.Label(
+            conf_frame,
+            text="Ejemplo: 0.50 = conservar detecciones ≥ 50%"
+        ).pack(side="left")
+
+        coin_guide = ttk.LabelFrame(
+            image_frame,
+            text="Prueba rápida con monedas",
+            padding=8
+        )
+        coin_guide.grid(
+            row=4, column=0,
+            sticky="ew", pady=(0, 8)
+        )
+
+        ttk.Label(
+            coin_guide,
+            text=(
+                "1) En input crea una carpeta llamada 'moneda'.  "
+                "2) Coloca fotos de UNA moneda por imagen sobre fondo uniforme.  "
+                "3) Genera el dataset aumentado.  "
+                "4) Entrena el detector.  "
+                "5) Selecciona una foto NUEVA con varias monedas y presiona "
+                "'Contar objetos'."
+            ),
+            justify="left",
+            wraplength=620
+        ).pack(anchor="w")
+
+        self.det_preview_label = ttk.Label(
+            image_frame,
+            text=(
+                "Selecciona una fotografía desde tu computadora.\n"
+                "Ejemplo: una foto con 5, 10 o más monedas separadas."
+            ),
+            anchor="center",
+            justify="center"
+        )
+        self.det_preview_label.grid(
+            row=5, column=0,
+            sticky="nsew"
+        )
+
+        ttk.Label(
+            image_frame,
+            textvariable=self.det_result_var,
+            font=("Segoe UI", 12, "bold"),
+            justify="left"
+        ).grid(
+            row=6, column=0,
+            sticky="w", pady=(10, 0)
+        )
+
+        # -------------------------------------------------------------
+        # Resultados + log
+        # -------------------------------------------------------------
+        results_frame = ttk.LabelFrame(
+            parent,
+            text="Conteo y registro",
+            padding=12
+        )
+        results_frame.grid(
+            row=1, column=1,
+            sticky="nsew", padx=6, pady=6
+        )
+        results_frame.columnconfigure(0, weight=1)
+        results_frame.rowconfigure(2, weight=1)
+
+        ttk.Label(
+            results_frame,
+            text="Conteo por clase",
+            font=("Segoe UI", 10, "bold")
+        ).grid(row=0, column=0, sticky="w")
+
+        self.det_count_tree = ttk.Treeview(
+            results_frame,
+            columns=("class", "count"),
+            show="headings",
+            height=7
+        )
+        self.det_count_tree.heading("class", text="Clase")
+        self.det_count_tree.heading("count", text="Cantidad")
+        self.det_count_tree.column("class", width=230, anchor="w")
+        self.det_count_tree.column("count", width=100, anchor="center")
+        self.det_count_tree.grid(
+            row=1, column=0,
+            sticky="ew", pady=(4, 10)
+        )
+
+        self.det_log_text = tk.Text(
+            results_frame,
+            wrap="word"
+        )
+        self.det_log_text.grid(
+            row=2, column=0,
+            sticky="nsew"
+        )
+
+        det_scroll = ttk.Scrollbar(
+            results_frame,
+            orient="vertical",
+            command=self.det_log_text.yview
+        )
+        det_scroll.grid(row=2, column=1, sticky="ns")
+        self.det_log_text.configure(
+            yscrollcommand=det_scroll.set,
+            state="disabled"
+        )
+
+        ttk.Label(
+            results_frame,
+            text=(
+                "Nota v11: el dataset actual contiene normalmente 1 bbox por "
+                "imagen. El detector ya puede devolver varias cajas en una foto, "
+                "pero para mejorar el conteo real conviene incorporar después "
+                "escenas con varios objetos."
+            ),
+            justify="left",
+            wraplength=620
+        ).grid(
+            row=3, column=0,
+            sticky="w", pady=(10, 0)
+        )
+
+        self.after(180, self.sync_detector_model_path)
+
+    def append_detector_log(self, text: str) -> None:
+        self.det_log_text.configure(state="normal")
+        self.det_log_text.insert("end", text.rstrip() + "\n")
+        self.det_log_text.see("end")
+        self.det_log_text.configure(state="disabled")
+
+    def sync_detector_model_path(self) -> None:
+        output_dir = self._get_output_dir()
+
+        if output_dir is None:
+            if not self.det_model_path_var.get().strip():
+                self.det_model_path_var.set("")
+            return
+
+        recommended = output_dir / "models" / DEFAULT_DETECTOR_MODEL_NAME
+        current = self.det_model_path_var.get().strip()
+
+        if not current:
+            self.det_model_path_var.set(str(recommended))
+            return
+
+        current_path = Path(current)
+
+        if (
+            current_path.name == DEFAULT_DETECTOR_MODEL_NAME
+            and current_path.parent.name == "models"
+        ):
+            self.det_model_path_var.set(str(recommended))
+
+    def select_detector_model_path(self) -> None:
+        self.sync_detector_model_path()
+        initial = self.det_model_path_var.get().strip()
+        initial_dir = (
+            str(Path(initial).parent)
+            if initial
+            else str(Path.cwd())
+        )
+
+        path = filedialog.asksaveasfilename(
+            title="Guardar detector",
+            defaultextension=".pth",
+            filetypes=[
+                ("PyTorch detector", "*.pth"),
+                ("Todos los archivos", "*.*")
+            ],
+            initialdir=initial_dir,
+            initialfile=(
+                Path(initial).name
+                if initial
+                else DEFAULT_DETECTOR_MODEL_NAME
+            ),
+        )
+
+        if path:
+            self.det_model_path_var.set(path)
+
+    def start_detector_training(self) -> None:
+        if self.det_training:
+            messagebox.showinfo(
+                "Entrenamiento",
+                "Ya hay un entrenamiento del detector en curso."
+            )
+            return
+
+        threading.Thread(
+            target=self.detector_training_action,
+            daemon=True
+        ).start()
+
+    def detector_training_action(self) -> None:
+        try:
+            output_dir = self._get_output_dir()
+
+            if output_dir is None or not output_dir.exists():
+                raise FileNotFoundError(
+                    "Selecciona primero el output del dataset "
+                    "en la pestaña 1."
+                )
+
+            self.sync_detector_model_path()
+
+            model_path_raw = self.det_model_path_var.get().strip()
+
+            if not model_path_raw:
+                raise ValueError(
+                    "Define dónde guardar el detector .pth."
+                )
+
+            epochs = int(self.det_epochs_var.get().strip())
+            batch_size = int(self.det_batch_var.get().strip())
+            learning_rate = float(self.det_lr_var.get().strip())
+            val_fraction = float(
+                self.det_val_fraction_var.get().strip()
+            )
+            seed = int(self.det_seed_var.get().strip())
+            use_pretrained = bool(self.det_pretrained_var.get())
+
+            self.det_training = True
+
+            self.after(
+                0,
+                lambda: self.det_train_button.configure(
+                    state="disabled"
+                )
+            )
+            self.after(
+                0,
+                lambda: self.det_progress.configure(value=0)
+            )
+            self.after(
+                0,
+                lambda: self.det_status_var.set(
+                    "Preparando detector..."
+                )
+            )
+            self.after(
+                0,
+                lambda: self.append_detector_log(
+                    "\n=== Nuevo entrenamiento de detección ===\n"
+                    f"Dataset: {output_dir}\n"
+                    f"Modelo: {model_path_raw}\n"
+                    f"Pesos COCO preentrenados: {use_pretrained}"
+                )
+            )
+
+            def progress(data: dict) -> None:
+                epoch = int(data["epoch"])
+                total = int(data["epochs"])
+                percent = 100.0 * epoch / max(total, 1)
+
+                line = (
+                    f"Época {epoch}/{total} | "
+                    f"loss={data['train_loss']:.4f} | "
+                    f"precision={data['precision']:.2f}% | "
+                    f"recall={data['recall']:.2f}% | "
+                    f"F1={data['f1']:.2f}%"
+                )
+
+                self.after(
+                    0,
+                    lambda p=percent:
+                    self.det_progress.configure(value=p)
+                )
+                self.after(
+                    0,
+                    lambda l=line:
+                    self.append_detector_log(l)
+                )
+                self.after(
+                    0,
+                    lambda e=epoch, t=total, d=data:
+                    self.det_status_var.set(
+                        f"Entrenando {e}/{t} | "
+                        f"{d['device']} | "
+                        f"mejor F1={d['best_f1']:.2f}%"
+                    )
+                )
+
+            summary = train_detector(
+                dataset_output_dir=output_dir,
+                model_path=Path(model_path_raw),
+                epochs=epochs,
+                batch_size=batch_size,
+                learning_rate=learning_rate,
+                val_fraction=val_fraction,
+                seed=seed,
+                use_pretrained=use_pretrained,
+                progress_callback=progress,
+            )
+
+            def finish() -> None:
+                self.det_progress.configure(value=100)
+                self.det_status_var.set(
+                    "Entrenamiento terminado. "
+                    f"Mejor F1={summary['best_f1']:.2f}% "
+                    f"(época {summary['best_epoch']})."
+                )
+
+                self.append_detector_log(
+                    f"Arquitectura: {summary['architecture']}\n"
+                    f"Clases: {', '.join(summary['class_names'])}\n"
+                    f"Imágenes: {summary['total_images']} "
+                    f"(train={summary['train_images']}, "
+                    f"val={summary['val_images']})\n"
+                    f"Dispositivo: {summary['device']}\n"
+                    f"Mejor detector: {summary['model_path']}"
+                )
+
+                for warning in summary.get("warnings", []):
+                    self.append_detector_log(
+                        "AVISO: " + warning
+                    )
+
+                self.refresh_detector_model_info()
+
+                messagebox.showinfo(
+                    "Entrenamiento completado",
+                    (
+                        f"Detector guardado en:\n"
+                        f"{summary['model_path']}\n\n"
+                        f"Clases: {summary['num_classes']}\n"
+                        f"Imágenes: {summary['total_images']}\n"
+                        f"Mejor F1: {summary['best_f1']:.2f}%"
+                    )
+                )
+
+            self.after(0, finish)
+
+        except Exception as e:
+            self.after(
+                0,
+                lambda: self.det_status_var.set(
+                    "Error de entrenamiento."
+                )
+            )
+            self.after(
+                0,
+                lambda err=str(e):
+                self.append_detector_log("ERROR: " + err)
+            )
+            self.after(
+                0,
+                lambda err=str(e):
+                messagebox.showerror(
+                    "Error de entrenamiento del detector",
+                    err
+                )
+            )
+        finally:
+            self.det_training = False
+            self.after(
+                0,
+                lambda: self.det_train_button.configure(
+                    state="normal"
+                )
+            )
+
+    def refresh_detector_model_info(self) -> None:
+        try:
+            raw = self.det_model_path_var.get().strip()
+
+            if not raw:
+                self.det_model_info_var.set(
+                    "Sin ruta de detector."
+                )
+                return
+
+            path = Path(raw)
+
+            if not path.exists():
+                self.det_model_info_var.set(
+                    "El detector aún no existe en la ruta indicada."
+                )
+                return
+
+            info = load_detector_metadata(path)
+            classes = ", ".join(info.get("class_names", []))
+            best = info.get("best_f1")
+            best_text = (
+                "N/D"
+                if best is None
+                else f"{float(best):.2f}%"
+            )
+
+            self.det_model_info_var.set(
+                f"Arquitectura: {info.get('architecture')} | "
+                f"mejor F1={best_text}\n"
+                f"Clases: {classes}"
+            )
+
+        except Exception as e:
+            self.det_model_info_var.set(
+                f"No se pudo leer el detector: {e}"
+            )
+
+    def clear_detector_test(self) -> None:
+        self.det_current_pil_image = None
+        self.det_image_path_var.set("")
+        self.det_preview_photo = None
+        self.det_preview_label.configure(
+            image="",
+            text=(
+                "Selecciona una fotografía desde tu computadora.\n"
+                "Ejemplo: una foto con varias monedas separadas."
+            )
+        )
+        self.det_result_var.set("Sin conteo.")
+
+        for item in self.det_count_tree.get_children():
+            self.det_count_tree.delete(item)
+
+    def select_detector_test_image(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Selecciona una imagen para contar",
+            filetypes=[
+                ("Imágenes", "*.jpg *.jpeg *.png *.bmp *.webp"),
+                ("Todos los archivos", "*.*")
+            ]
+        )
+
+        if not path:
+            return
+
+        try:
+            with Image.open(path) as img:
+                self.det_current_pil_image = img.convert("RGB").copy()
+
+            self.det_image_path_var.set(path)
+            self.show_detector_preview(
+                self.det_current_pil_image
+            )
+            self.det_result_var.set(
+                "Imagen cargada. Presiona 'Contar objetos'."
+            )
+
+        except Exception as e:
+            messagebox.showerror(
+                "Error de imagen",
+                str(e)
+            )
+
+    def show_detector_preview(self, image: Image.Image) -> None:
+        preview = image.convert("RGB").copy()
+        preview.thumbnail((680, 390))
+        self.det_preview_photo = ImageTk.PhotoImage(preview)
+        self.det_preview_label.configure(
+            image=self.det_preview_photo,
+            text=""
+        )
+
+    def start_detector_prediction(self) -> None:
+        threading.Thread(
+            target=self.detector_prediction_action,
+            daemon=True
+        ).start()
+
+    def detector_prediction_action(self) -> None:
+        try:
+            model_raw = self.det_model_path_var.get().strip()
+
+            if not model_raw:
+                raise ValueError(
+                    "Selecciona o entrena primero un detector .pth."
+                )
+
+            if self.det_current_pil_image is None:
+                raise ValueError(
+                    "Selecciona una imagen o captura un frame "
+                    "de la webcam."
+                )
+
+            confidence = float(
+                self.det_confidence_var.get().strip()
+            )
+
+            if not (0.0 < confidence < 1.0):
+                raise ValueError(
+                    "La confianza mínima debe estar entre 0 y 1."
+                )
+
+            image_copy = self.det_current_pil_image.copy()
+
+            self.after(
+                0,
+                lambda: self.det_result_var.set(
+                    "Detectando y contando..."
+                )
+            )
+
+            result = predict_pil_image(
+                image_copy,
+                model_path=Path(model_raw),
+                confidence_threshold=confidence,
+            )
+
+            annotated = draw_detections(
+                image_copy,
+                result["detections"]
+            )
+
+            def finish() -> None:
+                self.show_detector_preview(annotated)
+
+                if len(result["counts"]) == 1:
+                    only_class, only_count = next(iter(result["counts"].items()))
+                    self.det_result_var.set(
+                        f"{only_class}: {only_count} detectadas "
+                        f"| total={result['total']} "
+                        f"| dispositivo={result['device']}"
+                    )
+                else:
+                    self.det_result_var.set(
+                        f"Total detectado: {result['total']} "
+                        f"| dispositivo: {result['device']}"
+                    )
+
+                for item in self.det_count_tree.get_children():
+                    self.det_count_tree.delete(item)
+
+                for class_name, count in sorted(
+                    result["counts"].items()
+                ):
+                    self.det_count_tree.insert(
+                        "",
+                        "end",
+                        values=(class_name, count)
+                    )
+
+                self.append_detector_log(
+                    f"\nInferencia | total={result['total']} | "
+                    f"threshold={confidence:.2f}"
+                )
+
+                for detection in result["detections"]:
+                    self.append_detector_log(
+                        f"- {detection['class_name']} | "
+                        f"{detection['percentage']:.2f}% | "
+                        f"bbox="
+                        f"{[round(v, 1) for v in detection['bbox_xyxy']]}"
+                    )
+
+            self.after(0, finish)
+
+        except Exception as e:
+            self.after(
+                0,
+                lambda err=str(e):
+                messagebox.showerror(
+                    "Error de detección",
+                    err
+                )
+            )
+
+    def start_webcam_capture(self) -> None:
+        threading.Thread(
+            target=self.webcam_capture_action,
+            args=(False,),
+            daemon=True
+        ).start()
+
+    def start_webcam_capture_and_count(self) -> None:
+        threading.Thread(
+            target=self.webcam_capture_action,
+            args=(True,),
+            daemon=True
+        ).start()
+
+    def webcam_capture_action(self, count_after: bool = False) -> None:
+        try:
+            camera_index = int(
+                self.det_camera_index_var.get().strip()
+            )
+            width = int(
+                self.det_camera_width_var.get().strip()
+            )
+            height = int(
+                self.det_camera_height_var.get().strip()
+            )
+
+            self.after(
+                0,
+                lambda: self.det_result_var.set(
+                    "Capturando frame de webcam..."
+                )
+            )
+
+            image = capture_webcam_image(
+                camera_index=camera_index,
+                width=width,
+                height=height,
+            )
+
+            def show_capture() -> None:
+                self.det_current_pil_image = image.copy()
+                self.det_image_path_var.set(
+                    f"Webcam {camera_index} | "
+                    f"{image.size[0]}x{image.size[1]}"
+                )
+                self.show_detector_preview(image)
+                self.det_result_var.set(
+                    "Frame capturado correctamente."
+                )
+
+            self.after(0, show_capture)
+
+            if count_after:
+                # Espera a que Tk registre visualmente la captura y
+                # luego lanza la inferencia en un hilo nuevo.
+                self.after(
+                    100,
+                    self.start_detector_prediction
+                )
+
+        except Exception as e:
+            self.after(
+                0,
+                lambda err=str(e):
+                messagebox.showerror(
+                    "Error de webcam",
+                    err
+                )
+            )
+
     def open_notes_window(self) -> None:
         NotesWindow(self)
 
@@ -823,6 +1766,7 @@ class AugmentApp(tk.Tk):
         if last_output and Path(last_output).exists():
             self.refresh_augmented_list()
             self.sync_nn_model_path()
+            self.sync_detector_model_path()
 
         if last_input or last_output:
             self.session_info_var.set(
@@ -1073,6 +2017,7 @@ class AugmentApp(tk.Tk):
             self.output_dir_var.set(folder)
             self.refresh_augmented_list()
             self.sync_nn_model_path()
+            self.sync_detector_model_path()
             self.save_session_json()
             self.session_info_var.set(
                 f"Sesión guardada. Último output: {folder}"

@@ -1,79 +1,111 @@
-# Augment GUI Project v10
+# Augment GUI Project v11 - Pruebas con monedas
 
-Estructura del proyecto:
+Esta revisión mantiene la v11 y mejora el flujo para hacer pruebas de conteo
+seleccionando imágenes desde la computadora, sin necesidad de tener webcam.
+
+## Estructura
 
 ```text
-augment_gui_project_v10/
+augment_gui_project_v11_monedas/
 ├── src/
 │   ├── __init__.py
 │   ├── gui_app.py
 │   ├── augment_core.py
 │   ├── bbox_utils.py
-│   └── classifier_core.py
+│   ├── classifier_core.py
+│   └── detection_core.py
 ├── README.md
 └── requirements.txt
 ```
 
-Todos los archivos Python se encuentran dentro de `src/`.
+## Prueba mínima recomendada con monedas
 
-## Instalación
+### 1. Crear clase
 
-Desde la carpeta raíz del proyecto:
+```text
+input/
+└── moneda/
+    ├── moneda_01.jpg
+    ├── moneda_02.jpg
+    ├── moneda_03.jpg
+    └── ...
+```
+
+Las imágenes de entrenamiento deberían contener inicialmente UNA moneda
+por fotografía sobre un fondo lo más uniforme posible.
+
+### 2. Generar augmentation
+
+Usa la pestaña:
+
+`1. Dataset / Augmentación`
+
+El programa genera las imágenes y bounding boxes.
+
+### 3. Entrenar detector
+
+Usa la pestaña:
+
+`3. Detección / Conteo`
+
+Valores iniciales sugeridos:
+
+```text
+Épocas: 10
+Batch: 2
+Learning rate: 0.0005
+Validación: 0.20
+Seed: 42
+Pesos COCO preentrenados: activado
+```
+
+### 4. Hacer fotografía nueva
+
+Toma una fotografía que NO haya sido usada en entrenamiento.
+
+Ejemplo:
+
+```text
+foto_prueba.jpg
+- 5 monedas
+- relativamente separadas
+- buena iluminación
+- fondo uniforme
+```
+
+### 5. Probar
+
+En `3. Detección / Conteo`:
+
+1. Seleccionar imagen
+2. Elegir `foto_prueba.jpg`
+3. Presionar `Contar objetos`
+
+La GUI mostrará:
+- bounding boxes
+- confianza de cada detección
+- cantidad por clase
+- total detectado
+
+## Webcam
+
+La sección de webcam se conserva porque se utilizará después, pero es
+completamente opcional. Para las pruebas actuales basta con seleccionar
+fotografías guardadas.
+
+## Importante
+
+El detector puede intentar encontrar varias monedas aunque el dataset inicial
+tenga una moneda por fotografía. Sin embargo, esto es una prueba de concepto.
+
+Para mejorar el conteo posteriormente convendrá entrenar también con imágenes
+que contengan varias monedas y una bounding box por cada moneda.
+
+## Ejecutar
+
+Desde la raíz:
 
 ```bash
 pip install -r requirements.txt
-```
-
-## Ejecutar la interfaz
-
-### Opción recomendada
-
-Desde la carpeta `augment_gui_project_v10`:
-
-```bash
 python -m src.gui_app
 ```
-
-### También funciona
-
-```bash
-python src/gui_app.py
-```
-
-No uses imports como:
-
-```python
-from augment_gui_project_v10.src.augment_core import ...
-```
-
-porque el nombre de la carpeta del proyecto no necesita estar instalado como paquete.
-
-## Pestañas
-
-### 1. Dataset / Augmentación
-Mantiene el flujo de la v9:
-- originales
-- imágenes augmentadas
-- bounding boxes
-- configuración por clase
-
-### 2. Red neuronal / Prueba
-Usa:
-- `output/original_images`
-- `output/augmented_images`
-
-para entrenar una CNN de clasificación.
-
-Guarda por defecto:
-
-```text
-output/models/classifier_best.pth
-```
-
-Después permite seleccionar una imagen completa y devuelve:
-- clase predicha
-- confianza de la clase principal
-- porcentaje para cada clase
-
-Esta versión todavía es de **clasificación de imagen completa**.
-No realiza conteo ni detección de varios objetos.
