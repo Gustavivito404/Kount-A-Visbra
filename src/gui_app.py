@@ -111,6 +111,15 @@ Notas de uso
 8. La última ruta de input y output usada por la interfaz se guarda en:
    ui_session_config.json
    junto al proyecto de la app.
+
+9. La augmentación visual permite ajustar brillo, contraste, saturación y hue.
+
+10. Sal y pimienta:
+   - Probabilidad 0.30 = se aplica aproximadamente al 30% de las copias.
+   - Cantidad 0.003 = altera aproximadamente el 0.3% de los píxeles.
+
+11. El ruido se aplica después de las transformaciones geométricas, por lo que
+    no modifica las coordenadas de las bounding boxes.
 """
 
 SESSION_CONFIG_FILENAME = "ui_session_config.json"
@@ -157,6 +166,15 @@ class AugmentApp(tk.Tk):
         self.g_max_var = tk.StringVar(value="240")
         self.b_min_var = tk.StringVar(value="0")
         self.b_max_var = tk.StringVar(value="240")
+
+        # Parámetros de augmentación visual
+        self.aug_brightness_var = tk.StringVar(value="0.30")
+        self.aug_contrast_var = tk.StringVar(value="0.20")
+        self.aug_saturation_var = tk.StringVar(value="0.08")
+        self.aug_hue_var = tk.StringVar(value="0.01")
+        self.salt_pepper_enabled_var = tk.BooleanVar(value=True)
+        self.salt_pepper_probability_var = tk.StringVar(value="0.30")
+        self.salt_pepper_amount_var = tk.StringVar(value="0.003")
 
         self.class_params: dict[str, dict[str, int]] = {}
         self.current_scope_var = tk.StringVar(value="General / default")
@@ -315,8 +333,71 @@ class AugmentApp(tk.Tk):
         self.scope_min_fg_entry.grid(row=13, column=1, sticky="w", padx=6)
         self.scope_min_fg_entry.bind("<FocusOut>", self.on_scope_entries_focus_out)
 
+        ttk.Separator(form, orient="horizontal").grid(
+            row=14, column=0, columnspan=3, sticky="ew", pady=7
+        )
+
+        ttk.Label(
+            form,
+            text="Augmentación visual",
+            font=("Segoe UI", 9, "bold")
+        ).grid(row=15, column=0, columnspan=3, sticky="w", pady=(2, 4))
+
+        ttk.Label(form, text="Brillo / contraste").grid(
+            row=16, column=0, sticky="w", pady=3
+        )
+        bc_frame = ttk.Frame(form)
+        bc_frame.grid(row=16, column=1, sticky="w", padx=6)
+        ttk.Entry(
+            bc_frame, textvariable=self.aug_brightness_var, width=7
+        ).pack(side="left")
+        ttk.Label(bc_frame, text=" / ").pack(side="left")
+        ttk.Entry(
+            bc_frame, textvariable=self.aug_contrast_var, width=7
+        ).pack(side="left")
+
+        ttk.Label(form, text="Saturación / hue").grid(
+            row=17, column=0, sticky="w", pady=3
+        )
+        sh_frame = ttk.Frame(form)
+        sh_frame.grid(row=17, column=1, sticky="w", padx=6)
+        ttk.Entry(
+            sh_frame, textvariable=self.aug_saturation_var, width=7
+        ).pack(side="left")
+        ttk.Label(sh_frame, text=" / ").pack(side="left")
+        ttk.Entry(
+            sh_frame, textvariable=self.aug_hue_var, width=7
+        ).pack(side="left")
+
+        ttk.Checkbutton(
+            form,
+            text="Ruido sal y pimienta",
+            variable=self.salt_pepper_enabled_var
+        ).grid(row=18, column=0, sticky="w", pady=3)
+
+        sp_frame = ttk.Frame(form)
+        sp_frame.grid(row=18, column=1, columnspan=2, sticky="w", padx=6)
+        ttk.Label(sp_frame, text="Prob.").pack(side="left")
+        ttk.Entry(
+            sp_frame,
+            textvariable=self.salt_pepper_probability_var,
+            width=7
+        ).pack(side="left", padx=(3, 8))
+        ttk.Label(sp_frame, text="Cantidad").pack(side="left")
+        ttk.Entry(
+            sp_frame,
+            textvariable=self.salt_pepper_amount_var,
+            width=7
+        ).pack(side="left", padx=3)
+
+        ttk.Label(
+            form,
+            text="Ej.: brillo 0.30 = 70–130% | ruido 0.003 = 0.3%",
+            justify="left"
+        ).grid(row=19, column=0, columnspan=3, sticky="w", pady=(1, 3))
+
         ttk.Checkbutton(form, text="Permitir flip horizontal", variable=self.flip_var).grid(
-            row=14, column=1, sticky="w", padx=6, pady=5
+            row=20, column=1, sticky="w", padx=6, pady=5
         )
 
         form.columnconfigure(1, weight=1)
@@ -1237,6 +1318,46 @@ class AugmentApp(tk.Tk):
         )
 
 
+    def _get_augmentation_params(self) -> dict:
+        brightness = float(self.aug_brightness_var.get().strip())
+        contrast = float(self.aug_contrast_var.get().strip())
+        saturation = float(self.aug_saturation_var.get().strip())
+        hue = float(self.aug_hue_var.get().strip())
+        salt_pepper_probability = float(
+            self.salt_pepper_probability_var.get().strip()
+        )
+        salt_pepper_amount = float(
+            self.salt_pepper_amount_var.get().strip()
+        )
+
+        if not (0.0 <= brightness <= 1.0):
+            raise ValueError("Brillo debe estar entre 0.0 y 1.0.")
+        if not (0.0 <= contrast <= 1.0):
+            raise ValueError("Contraste debe estar entre 0.0 y 1.0.")
+        if not (0.0 <= saturation <= 1.0):
+            raise ValueError("Saturación debe estar entre 0.0 y 1.0.")
+        if not (0.0 <= hue <= 0.5):
+            raise ValueError("Hue debe estar entre 0.0 y 0.5.")
+        if not (0.0 <= salt_pepper_probability <= 1.0):
+            raise ValueError(
+                "Probabilidad de sal y pimienta debe estar entre 0.0 y 1.0."
+            )
+        if not (0.0 <= salt_pepper_amount <= 0.10):
+            raise ValueError(
+                "Cantidad de sal y pimienta debe estar entre 0.0 y 0.10."
+            )
+
+        return {
+            "brightness": brightness,
+            "contrast": contrast,
+            "saturation": saturation,
+            "hue": hue,
+            "enable_salt_pepper": bool(self.salt_pepper_enabled_var.get()),
+            "salt_pepper_probability": salt_pepper_probability,
+            "salt_pepper_amount": salt_pepper_amount,
+        }
+
+
     def _validate_scope_values(self, white_threshold: str, min_fg: str) -> tuple[int, int]:
         w = int(white_threshold.strip())
         m = int(min_fg.strip())
@@ -1278,6 +1399,7 @@ class AugmentApp(tk.Tk):
             return
 
         threshold, min_fg, _, detection_mode, rgb_min, rgb_max = self._get_detection_params()
+        augmentation_params = self._get_augmentation_params()
         save_class_config_json(
             input_dir=input_dir,
             default_white_threshold=threshold,
@@ -1286,6 +1408,7 @@ class AugmentApp(tk.Tk):
             detection_mode=detection_mode,
             rgb_min=rgb_min,
             rgb_max=rgb_max,
+            augmentation_params=augmentation_params,
         )
 
 
@@ -1297,6 +1420,7 @@ class AugmentApp(tk.Tk):
         data = load_class_config_json(input_dir)
         default_data = data.get("default", {})
         classes_data = data.get("classes", {})
+        augmentation_data = data.get("augmentation", {})
 
         if default_data:
             self.threshold_var.set(str(default_data.get("white_threshold", self.threshold_var.get())))
@@ -1313,6 +1437,39 @@ class AugmentApp(tk.Tk):
                 self.r_max_var.set(str(rgb_max[0]))
                 self.g_max_var.set(str(rgb_max[1]))
                 self.b_max_var.set(str(rgb_max[2]))
+
+        if augmentation_data:
+            self.aug_brightness_var.set(
+                str(augmentation_data.get("brightness", self.aug_brightness_var.get()))
+            )
+            self.aug_contrast_var.set(
+                str(augmentation_data.get("contrast", self.aug_contrast_var.get()))
+            )
+            self.aug_saturation_var.set(
+                str(augmentation_data.get("saturation", self.aug_saturation_var.get()))
+            )
+            self.aug_hue_var.set(
+                str(augmentation_data.get("hue", self.aug_hue_var.get()))
+            )
+            self.salt_pepper_enabled_var.set(
+                bool(augmentation_data.get("enable_salt_pepper", True))
+            )
+            self.salt_pepper_probability_var.set(
+                str(
+                    augmentation_data.get(
+                        "salt_pepper_probability",
+                        self.salt_pepper_probability_var.get()
+                    )
+                )
+            )
+            self.salt_pepper_amount_var.set(
+                str(
+                    augmentation_data.get(
+                        "salt_pepper_amount",
+                        self.salt_pepper_amount_var.get()
+                    )
+                )
+            )
 
         loaded_class_params = {}
         for class_name, values in classes_data.items():
@@ -1674,6 +1831,7 @@ class AugmentApp(tk.Tk):
             copies = int(self.copies_var.get().strip())
             seed = int(self.seed_var.get().strip())
             threshold, min_fg, enable_hflip, detection_mode, rgb_min, rgb_max = self._get_detection_params()
+            augmentation_params = self._get_augmentation_params()
 
             if input_dir is None or not input_dir.exists():
                 raise FileNotFoundError("La carpeta input no existe.")
@@ -1697,6 +1855,13 @@ class AugmentApp(tk.Tk):
                 detection_mode=detection_mode,
                 rgb_min=rgb_min,
                 rgb_max=rgb_max,
+                brightness=augmentation_params["brightness"],
+                contrast=augmentation_params["contrast"],
+                saturation=augmentation_params["saturation"],
+                hue=augmentation_params["hue"],
+                enable_salt_pepper=augmentation_params["enable_salt_pepper"],
+                salt_pepper_probability=augmentation_params["salt_pepper_probability"],
+                salt_pepper_amount=augmentation_params["salt_pepper_amount"],
             )
 
             self.after(0, self.refresh_augmented_list)
@@ -1719,7 +1884,13 @@ class AugmentApp(tk.Tk):
                 (
                     "Proceso completado.\n\n"
                     f"Modo BBox: {detection_mode}\n"
-                    f"RGB min/max: {rgb_min} / {rgb_max}\n\n"
+                    f"RGB min/max: {rgb_min} / {rgb_max}\n"
+                    f"Brillo: {augmentation_params['brightness']} | "
+                    f"Contraste: {augmentation_params['contrast']}\n"
+                    f"Sal y pimienta: "
+                    f"{'Sí' if augmentation_params['enable_salt_pepper'] else 'No'} | "
+                    f"prob={augmentation_params['salt_pepper_probability']} | "
+                    f"cantidad={augmentation_params['salt_pepper_amount']}\n\n"
                     f"Originales encontradas: {summary['original_images_found']}\n"
                     f"Originales copiadas: {summary['copied_original_images']}\n"
                     f"Augmentadas creadas: {summary['augmented_images_created']}\n"

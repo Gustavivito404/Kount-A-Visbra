@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from torchvision.ops import batched_nms
 
 
 VALID_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
@@ -627,7 +628,18 @@ def _predict_tensor(
     class_names: list[str],
     device: torch.device,
     confidence_threshold: float,
+    nms_iou_threshold: float = 0.8,
 ) -> list[dict]:
+    """
+    Ejecuta inferencia, filtra por confianza y aplica un NMS adicional
+    por clase para reducir dobles conteos.
+    """
+    if not (0.0 < confidence_threshold < 1.0):
+        raise ValueError("confidence_threshold debe estar entre 0 y 1.")
+
+    if not (0.0 < nms_iou_threshold < 1.0):
+        raise ValueError("nms_iou_threshold debe estar entre 0 y 1.")
+
     with torch.no_grad():
         output = model([image_tensor.to(device)])[0]
 
@@ -635,14 +647,27 @@ def _predict_tensor(
     labels = output["labels"].detach().cpu()
     scores = output["scores"].detach().cpu()
 
+    keep_confidence = scores >= confidence_threshold
+    boxes = boxes[keep_confidence]
+    labels = labels[keep_confidence]
+    scores = scores[keep_confidence]
+
+    # NMS por clase: cajas de clases distintas no se eliminan entre si.
+    if len(boxes) > 0:
+        keep_nms = batched_nms(
+            boxes,
+            scores,
+            labels,
+            iou_threshold=nms_iou_threshold,
+        )
+        boxes = boxes[keep_nms]
+        labels = labels[keep_nms]
+        scores = scores[keep_nms]
+
     detections: list[dict] = []
 
     for box, label, score in zip(boxes, labels, scores):
         score_value = float(score.item())
-
-        if score_value < confidence_threshold:
-            continue
-
         detector_id = int(label.item())
 
         if detector_id <= 0 or detector_id > len(class_names):
@@ -660,11 +685,11 @@ def _predict_tensor(
 
     return detections
 
-
 def predict_pil_image(
     image: Image.Image,
     model_path: Path,
     confidence_threshold: float = 0.50,
+    nms_iou_threshold: float = 0.35,
 ) -> dict:
     model, checkpoint, class_names, device, architecture = (
         load_detector_for_inference(model_path)
@@ -679,6 +704,7 @@ def predict_pil_image(
         class_names,
         device,
         confidence_threshold,
+        nms_iou_threshold,
     )
 
     counts = {name: 0 for name in class_names}
@@ -697,6 +723,7 @@ def predict_pil_image(
         "architecture": architecture,
         "best_f1": checkpoint.get("best_f1"),
         "best_epoch": checkpoint.get("best_epoch"),
+        "nms_iou_threshold": nms_iou_threshold,
     }
 
 
@@ -704,6 +731,7 @@ def predict_image_file(
     image_path: Path,
     model_path: Path,
     confidence_threshold: float = 0.50,
+    nms_iou_threshold: float = 0.35,
 ) -> dict:
     image_path = Path(image_path)
 
@@ -715,6 +743,7 @@ def predict_image_file(
             img,
             model_path=model_path,
             confidence_threshold=confidence_threshold,
+            nms_iou_threshold=nms_iou_threshold,
         )
 
 

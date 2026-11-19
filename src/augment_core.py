@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
+import numpy as np
 import torch
 from PIL import Image
 from torchvision import tv_tensors
@@ -27,6 +28,7 @@ CLASS_CONFIG_FILENAME = "augment_thresholds_config.json"
 
 def set_seed(seed: int) -> None:
     random.seed(seed)
+    np.random.seed(seed)
     torch.manual_seed(seed)
 
 
@@ -99,9 +101,12 @@ def save_class_config_json(
     detection_mode: str = "white",
     rgb_min: tuple[int, int, int] = (0, 0, 0),
     rgb_max: tuple[int, int, int] = (240, 240, 240),
+    augmentation_params: dict | None = None,
 ) -> Path:
     input_dir.mkdir(parents=True, exist_ok=True)
     json_path = get_config_json_path(input_dir)
+
+    augmentation_params = augmentation_params or {}
 
     payload = {
         "default": {
@@ -110,6 +115,15 @@ def save_class_config_json(
             "detection_mode": detection_mode,
             "rgb_min": [int(v) for v in rgb_min],
             "rgb_max": [int(v) for v in rgb_max],
+        },
+        "augmentation": {
+            "brightness": float(augmentation_params.get("brightness", 0.30)),
+            "contrast": float(augmentation_params.get("contrast", 0.20)),
+            "saturation": float(augmentation_params.get("saturation", 0.08)),
+            "hue": float(augmentation_params.get("hue", 0.01)),
+            "enable_salt_pepper": bool(augmentation_params.get("enable_salt_pepper", True)),
+            "salt_pepper_probability": float(augmentation_params.get("salt_pepper_probability", 0.30)),
+            "salt_pepper_amount": float(augmentation_params.get("salt_pepper_amount", 0.003)),
         },
         "classes": {
             str(class_name): {
@@ -126,7 +140,6 @@ def save_class_config_json(
     )
     return json_path
 
-
 def load_class_config_json(input_dir: Path) -> dict:
     json_path = get_config_json_path(input_dir)
     if not json_path.exists():
@@ -137,6 +150,8 @@ def load_class_config_json(input_dir: Path) -> dict:
         data["default"] = {}
     if "classes" not in data:
         data["classes"] = {}
+    if "augmentation" not in data:
+        data["augmentation"] = {}
     return data
 
 
@@ -161,7 +176,13 @@ def load_manifest(manifest_path: Path) -> dict:
     return json.loads(manifest_path.read_text(encoding="utf-8"))
 
 
-def build_detection_transform(enable_hflip: bool = True) -> T.Compose:
+def build_detection_transform(
+    enable_hflip: bool = True,
+    brightness: float = 0.30,
+    contrast: float = 0.20,
+    saturation: float = 0.08,
+    hue: float = 0.01,
+) -> T.Compose:
     ops: list = []
 
     if enable_hflip:
@@ -176,16 +197,63 @@ def build_detection_transform(enable_hflip: bool = True) -> T.Compose:
             shear=(-6, 6)
         ),
         T.ColorJitter(
-            brightness=0.15,
-            contrast=0.15,
-            saturation=0.10,
-            hue=0.02
+            brightness=brightness,
+            contrast=contrast,
+            saturation=saturation,
+            hue=hue
         ),
         T.ClampBoundingBoxes(),
         T.SanitizeBoundingBoxes(min_size=2),
     ])
     return T.Compose(ops)
 
+
+def apply_salt_pepper_noise(
+    img: Image.Image,
+    amount: float = 0.003,
+) -> Image.Image:
+    """0.003 equivale aproximadamente a 0.3% de píxeles alterados."""
+    if amount <= 0:
+        return img
+
+    image = img.convert("RGB")
+    arr = np.array(image, dtype=np.uint8).copy()
+    height, width, _ = arr.shape
+    total_pixels = height * width
+    affected = min(int(round(total_pixels * amount)), total_pixels)
+
+    if affected <= 0:
+        return image
+
+    flat = arr.reshape(-1, 3)
+    indices = np.random.choice(total_pixels, size=affected, replace=False)
+    half = affected // 2
+
+    flat[indices[:half]] = 0
+    flat[indices[half:]] = 255
+
+    return Image.fromarray(arr, mode="RGB")
+
+
+def apply_post_augmentation_effects(
+    img: Image.Image,
+    enable_salt_pepper: bool = True,
+    salt_pepper_probability: float = 0.30,
+    salt_pepper_amount: float = 0.003,
+) -> Image.Image:
+    result = img
+
+    if (
+        enable_salt_pepper
+        and salt_pepper_amount > 0
+        and random.random() < salt_pepper_probability
+    ):
+        result = apply_salt_pepper_noise(
+            result,
+            amount=salt_pepper_amount,
+        )
+
+    return result
 
 def generate_augmented_dataset_with_bboxes(
     input_dir: Path,
@@ -199,6 +267,13 @@ def generate_augmented_dataset_with_bboxes(
     detection_mode: str = "white",
     rgb_min: tuple[int, int, int] = (0, 0, 0),
     rgb_max: tuple[int, int, int] = (240, 240, 240),
+    brightness: float = 0.30,
+    contrast: float = 0.20,
+    saturation: float = 0.08,
+    hue: float = 0.01,
+    enable_salt_pepper: bool = True,
+    salt_pepper_probability: float = 0.30,
+    salt_pepper_amount: float = 0.003,
 ) -> dict:
     if not input_dir.exists():
         raise FileNotFoundError(f"La carpeta de entrada no existe: {input_dir}")
@@ -218,7 +293,13 @@ def generate_augmented_dataset_with_bboxes(
     for d in [original_images_dir, original_labels_dir, augmented_images_dir, augmented_labels_dir]:
         d.mkdir(parents=True, exist_ok=True)
 
-    transform = build_detection_transform(enable_hflip=enable_hflip)
+    transform = build_detection_transform(
+        enable_hflip=enable_hflip,
+        brightness=brightness,
+        contrast=contrast,
+        saturation=saturation,
+        hue=hue,
+    )
     set_seed(seed)
 
     generated_files: list[str] = []
@@ -291,6 +372,16 @@ def generate_augmented_dataset_with_bboxes(
             for i in range(1, copies_per_image + 1):
                 target = {"boxes": boxes, "labels": labels}
                 aug_img, aug_target = transform(img, target)
+
+                # El ruido se aplica después de la geometría, por lo que no
+                # desajusta las bounding boxes.
+                aug_img = apply_post_augmentation_effects(
+                    aug_img,
+                    enable_salt_pepper=enable_salt_pepper,
+                    salt_pepper_probability=salt_pepper_probability,
+                    salt_pepper_amount=salt_pepper_amount,
+                )
+
                 aug_boxes = aug_target["boxes"]
                 aug_labels = aug_target["labels"]
 
@@ -338,6 +429,15 @@ def generate_augmented_dataset_with_bboxes(
         "detection_mode": detection_mode,
         "rgb_min": list(rgb_min),
         "rgb_max": list(rgb_max),
+        "augmentation": {
+            "brightness": brightness,
+            "contrast": contrast,
+            "saturation": saturation,
+            "hue": hue,
+            "enable_salt_pepper": enable_salt_pepper,
+            "salt_pepper_probability": salt_pepper_probability,
+            "salt_pepper_amount": salt_pepper_amount,
+        },
     }
 
 
