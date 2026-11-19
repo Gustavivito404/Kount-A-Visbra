@@ -1,14 +1,14 @@
-# Visbra / Kount-A — v1.5.0
+# Visbra / Kount-A — v1.6.0
 
 **Reconstrucción documental de la entrega histórica de Visbra.**
 
-- **Etiqueta técnica:** `v1.5.0`
+- **Etiqueta técnica:** `v1.6.0`
 - **Etapa:** 1 de 3
-- **Versión original del proyecto:** 5
+- **Versión original del proyecto:** 6
 - **Revisión documentada:** 0
-- **Cambio principal:** Ventana de notas, recarga de vista previa y configuración de umbrales por clase.
-- **Procedencia:** `augment_gui_project_v5`
-- **Nota:** READMEs y código del directorio v5.
+- **Cambio principal:** Configuración de umbrales por clase integrada en el panel izquierdo.
+- **Procedencia:** `augment_gui_project_v6`
+- **Nota:** README y código del directorio v6.
 
 La numeración de GitHub es una convención documental personalizada, **no implica compatibilidad con versionado semántico estándar**. Los commits y las etiquetas fueron reconstruidos a partir de archivos proporcionados y **no representan fechas originales de desarrollo**.
 

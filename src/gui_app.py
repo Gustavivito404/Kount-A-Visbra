@@ -33,7 +33,7 @@ Notas de uso
    - Umbral de blanco
    - Mínimo de pixeles del objeto
 
-3. Si configuras umbrales por clase, esos valores tienen prioridad sobre los globales.
+3. Si asignas umbrales por clase, esos valores tienen prioridad sobre los globales.
    La clase se toma del primer nivel de carpeta dentro de input.
    Ejemplo:
    input/
@@ -60,142 +60,7 @@ Notas de uso
 """
 
 
-class ThresholdConfigWindow(tk.Toplevel):
-    def __init__(self, parent: "AugmentApp") -> None:
-        super().__init__(parent)
-        self.parent = parent
-        self.title("Configurar umbrales por clase")
-        self.geometry("760x520")
-        self.minsize(700, 460)
-
-        self.entries: dict[str, dict[str, tk.Entry]] = {}
-
-        self._build_ui()
-        self.load_classes()
-
-    def _build_ui(self) -> None:
-        container = ttk.Frame(self, padding=12)
-        container.pack(fill="both", expand=True)
-
-        ttk.Label(
-            container,
-            text="Umbrales por clase",
-            font=("Segoe UI", 12, "bold")
-        ).pack(anchor="w", pady=(0, 8))
-
-        ttk.Label(
-            container,
-            text=(
-                "Aquí puedes dar valores específicos por clase.\n"
-                "Si una clase usa valores distintos, el detector los aplicará durante la preview y la generación."
-            ),
-            justify="left"
-        ).pack(anchor="w", pady=(0, 10))
-
-        headers = ttk.Frame(container)
-        headers.pack(fill="x")
-        ttk.Label(headers, text="Clase", width=28).grid(row=0, column=0, sticky="w")
-        ttk.Label(headers, text="Umbral de blanco", width=18).grid(row=0, column=1, sticky="w")
-        ttk.Label(headers, text="Mín. pixeles objeto", width=18).grid(row=0, column=2, sticky="w")
-
-        self.canvas = tk.Canvas(container, highlightthickness=0)
-        self.canvas.pack(fill="both", expand=True, side="left")
-
-        scrollbar = ttk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
-        scrollbar.pack(fill="y", side="right")
-        self.canvas.configure(yscrollcommand=scrollbar.set)
-
-        self.inner = ttk.Frame(self.canvas)
-        self.canvas_window = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
-
-        self.inner.bind("<Configure>", self._on_inner_configure)
-        self.canvas.bind("<Configure>", self._on_canvas_configure)
-
-        btns = ttk.Frame(self)
-        btns.pack(fill="x", padx=12, pady=(0, 12))
-        ttk.Button(btns, text="Recargar clases", command=self.load_classes).pack(side="left")
-        ttk.Button(btns, text="Usar valores globales", command=self.fill_with_global_values).pack(side="left", padx=8)
-        ttk.Button(btns, text="Aplicar", command=self.apply_changes).pack(side="right")
-
-    def _on_inner_configure(self, event=None) -> None:
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def _on_canvas_configure(self, event=None) -> None:
-        self.canvas.itemconfig(self.canvas_window, width=self.canvas.winfo_width())
-
-    def load_classes(self) -> None:
-        for child in self.inner.winfo_children():
-            child.destroy()
-        self.entries.clear()
-
-        input_dir = Path(self.parent.input_dir_var.get().strip())
-        classes = get_class_names(input_dir) if input_dir.exists() else []
-
-        if not classes:
-            ttk.Label(
-                self.inner,
-                text="No se detectaron clases todavía. Primero selecciona una carpeta input válida.",
-                justify="left"
-            ).pack(anchor="w", pady=8)
-            return
-
-        global_threshold = self.parent.threshold_var.get().strip()
-        global_min_fg = self.parent.min_fg_var.get().strip()
-
-        for row, class_name in enumerate(classes):
-            shown_name = "(root)" if class_name == ROOT_CLASS_NAME else class_name
-
-            ttk.Label(self.inner, text=shown_name, width=28).grid(row=row, column=0, sticky="w", pady=4)
-
-            th_entry = ttk.Entry(self.inner, width=16)
-            minfg_entry = ttk.Entry(self.inner, width=16)
-
-            existing = self.parent.class_params.get(class_name, {})
-            th_entry.insert(0, str(existing.get("white_threshold", global_threshold)))
-            minfg_entry.insert(0, str(existing.get("min_foreground_pixels", global_min_fg)))
-
-            th_entry.grid(row=row, column=1, sticky="w", padx=4, pady=4)
-            minfg_entry.grid(row=row, column=2, sticky="w", padx=4, pady=4)
-
-            self.entries[class_name] = {
-                "white_threshold": th_entry,
-                "min_foreground_pixels": minfg_entry,
-            }
-
-    def fill_with_global_values(self) -> None:
-        global_threshold = self.parent.threshold_var.get().strip()
-        global_min_fg = self.parent.min_fg_var.get().strip()
-
-        for data in self.entries.values():
-            data["white_threshold"].delete(0, "end")
-            data["white_threshold"].insert(0, global_threshold)
-
-            data["min_foreground_pixels"].delete(0, "end")
-            data["min_foreground_pixels"].insert(0, global_min_fg)
-
-    def apply_changes(self) -> None:
-        new_params: dict[str, dict[str, int]] = {}
-
-        try:
-            for class_name, widgets in self.entries.items():
-                white_threshold = int(widgets["white_threshold"].get().strip())
-                min_fg = int(widgets["min_foreground_pixels"].get().strip())
-
-                if not (0 <= white_threshold <= 255):
-                    raise ValueError(f"El umbral de blanco de la clase '{class_name}' debe estar entre 0 y 255.")
-                if min_fg < 1:
-                    raise ValueError(f"El mínimo de pixeles de la clase '{class_name}' debe ser >= 1.")
-
-                new_params[class_name] = {
-                    "white_threshold": white_threshold,
-                    "min_foreground_pixels": min_fg,
-                }
-
-            self.parent.class_params = new_params
-            messagebox.showinfo("Éxito", "Configuración por clase aplicada.")
-            self.destroy()
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
+DEFAULT_SCOPE_KEY = "__default_scope__"
 
 
 class NotesWindow(tk.Toplevel):
@@ -227,11 +92,20 @@ class AugmentApp(tk.Tk):
         self.output_dir_var = tk.StringVar()
         self.copies_var = tk.StringVar(value="5")
         self.seed_var = tk.StringVar(value="42")
-        self.threshold_var = tk.StringVar(value="245")
-        self.min_fg_var = tk.StringVar(value="50")
         self.flip_var = tk.BooleanVar(value=True)
 
+        # Valores por defecto/globales
+        self.default_threshold_var = tk.StringVar(value="245")
+        self.default_min_fg_var = tk.StringVar(value="50")
+
+        # Editor visible en UI (cambia según el scope seleccionado)
+        self.threshold_editor_var = tk.StringVar(value="245")
+        self.min_fg_editor_var = tk.StringVar(value="50")
+        self.threshold_scope_var = tk.StringVar(value="General / default")
+
         self.class_params: dict[str, dict[str, int]] = {}
+        self.scope_display_to_key: dict[str, str] = {"General / default": DEFAULT_SCOPE_KEY}
+        self.current_scope_key: str = DEFAULT_SCOPE_KEY
 
         self.original_image_paths: list[Path] = []
         self.augmented_image_paths: list[Path] = []
@@ -240,6 +114,7 @@ class AugmentApp(tk.Tk):
         self.augmented_preview_photo = None
 
         self._build_ui()
+        self._refresh_scope_options()
 
     def _build_ui(self) -> None:
         container = ttk.Frame(self, padding=12)
@@ -284,14 +159,32 @@ class AugmentApp(tk.Tk):
         ttk.Label(form, text="Seed").grid(row=3, column=0, sticky="w", pady=5)
         ttk.Entry(form, textvariable=self.seed_var, width=12).grid(row=3, column=1, sticky="w", padx=6)
 
-        ttk.Label(form, text="Umbral de blanco global").grid(row=4, column=0, sticky="w", pady=5)
-        ttk.Entry(form, textvariable=self.threshold_var, width=12).grid(row=4, column=1, sticky="w", padx=6)
+        ttk.Separator(form, orient="horizontal").grid(row=4, column=0, columnspan=3, sticky="ew", pady=(8, 10))
 
-        ttk.Label(form, text="Mín. pixeles global").grid(row=5, column=0, sticky="w", pady=5)
-        ttk.Entry(form, textvariable=self.min_fg_var, width=12).grid(row=5, column=1, sticky="w", padx=6)
+        ttk.Label(form, text="Editar umbrales de").grid(row=5, column=0, sticky="w", pady=5)
+        self.scope_combo = ttk.Combobox(
+            form,
+            textvariable=self.threshold_scope_var,
+            state="readonly",
+            width=26,
+        )
+        self.scope_combo.grid(row=5, column=1, sticky="w", padx=6)
+        self.scope_combo.bind("<<ComboboxSelected>>", self.on_scope_changed)
+
+        ttk.Button(form, text="Recargar clases", command=self.reload_scope_options).grid(row=5, column=2, sticky="w")
+
+        ttk.Label(form, text="Umbral de blanco").grid(row=6, column=0, sticky="w", pady=5)
+        ttk.Entry(form, textvariable=self.threshold_editor_var, width=12).grid(row=6, column=1, sticky="w", padx=6)
+
+        ttk.Label(form, text="Mín. pixeles objeto").grid(row=7, column=0, sticky="w", pady=5)
+        ttk.Entry(form, textvariable=self.min_fg_editor_var, width=12).grid(row=7, column=1, sticky="w", padx=6)
+
+        ttk.Button(form, text="Guardar valores de esta selección", command=self.save_current_scope_values).grid(
+            row=8, column=1, sticky="w", padx=6, pady=(6, 4)
+        )
 
         ttk.Checkbutton(form, text="Permitir flip horizontal", variable=self.flip_var).grid(
-            row=6, column=1, sticky="w", padx=6, pady=6
+            row=9, column=1, sticky="w", padx=6, pady=6
         )
 
         form.columnconfigure(1, weight=1)
@@ -303,10 +196,9 @@ class AugmentApp(tk.Tk):
 
         tools = ttk.Frame(parent)
         tools.pack(fill="x", pady=(10, 0))
-        ttk.Button(tools, text="Configurar umbrales por clase", command=self.open_threshold_config_window).pack(side="left")
-        ttk.Button(tools, text="Ver notas", command=self.open_notes_window).pack(side="left", padx=8)
+        ttk.Button(tools, text="Ver notas", command=self.open_notes_window).pack(side="left")
 
-        self.class_config_info_var = tk.StringVar(value="Sin configuración por clase aplicada.")
+        self.class_config_info_var = tk.StringVar(value="Sin configuración específica por clase.")
         ttk.Label(parent, textvariable=self.class_config_info_var, justify="left").pack(anchor="w", pady=(10, 0))
 
     def _build_center_panel(self, parent: ttk.Frame) -> None:
@@ -387,12 +279,104 @@ class AugmentApp(tk.Tk):
     def open_notes_window(self) -> None:
         NotesWindow(self)
 
-    def open_threshold_config_window(self) -> None:
-        ThresholdConfigWindow(self)
+    def _display_name_for_class(self, class_name: str) -> str:
+        return "General / default" if class_name == DEFAULT_SCOPE_KEY else ("(root)" if class_name == ROOT_CLASS_NAME else class_name)
 
-    def _get_detection_params(self) -> tuple[int, int, bool]:
-        threshold = int(self.threshold_var.get().strip())
-        min_fg = int(self.min_fg_var.get().strip())
+    def _refresh_scope_options(self) -> None:
+        input_dir = Path(self.input_dir_var.get().strip())
+        class_names = get_class_names(input_dir) if input_dir.exists() else []
+
+        display_values = ["General / default"]
+        self.scope_display_to_key = {"General / default": DEFAULT_SCOPE_KEY}
+
+        for class_name in class_names:
+            display = self._display_name_for_class(class_name)
+            display_values.append(display)
+            self.scope_display_to_key[display] = class_name
+
+        self.scope_combo["values"] = display_values
+
+        # Mantener selección si todavía existe
+        current_display = self.threshold_scope_var.get().strip() or "General / default"
+        if current_display not in display_values:
+            current_display = "General / default"
+            self.current_scope_key = DEFAULT_SCOPE_KEY
+
+        self.threshold_scope_var.set(current_display)
+        self.current_scope_key = self.scope_display_to_key[current_display]
+        self._load_scope_values_into_editor(self.current_scope_key)
+        self._update_class_config_label()
+
+    def reload_scope_options(self) -> None:
+        try:
+            self.save_current_scope_values(show_message=False)
+        except Exception:
+            pass
+        self._refresh_scope_options()
+
+    def _load_scope_values_into_editor(self, scope_key: str) -> None:
+        if scope_key == DEFAULT_SCOPE_KEY:
+            self.threshold_editor_var.set(self.default_threshold_var.get())
+            self.min_fg_editor_var.set(self.default_min_fg_var.get())
+            return
+
+        data = self.class_params.get(scope_key, {})
+        self.threshold_editor_var.set(str(data.get("white_threshold", self.default_threshold_var.get())))
+        self.min_fg_editor_var.set(str(data.get("min_foreground_pixels", self.default_min_fg_var.get())))
+
+    def _validate_editor_values(self) -> tuple[int, int]:
+        white_threshold = int(self.threshold_editor_var.get().strip())
+        min_fg = int(self.min_fg_editor_var.get().strip())
+
+        if not (0 <= white_threshold <= 255):
+            raise ValueError("El umbral de blanco debe estar entre 0 y 255.")
+        if min_fg < 1:
+            raise ValueError("El mínimo de pixeles del objeto debe ser >= 1.")
+
+        return white_threshold, min_fg
+
+    def save_current_scope_values(self, show_message: bool = True) -> None:
+        white_threshold, min_fg = self._validate_editor_values()
+        scope_key = self.current_scope_key
+
+        if scope_key == DEFAULT_SCOPE_KEY:
+            self.default_threshold_var.set(str(white_threshold))
+            self.default_min_fg_var.set(str(min_fg))
+        else:
+            self.class_params[scope_key] = {
+                "white_threshold": white_threshold,
+                "min_foreground_pixels": min_fg,
+            }
+
+        self._update_class_config_label()
+
+        if show_message:
+            shown_name = self._display_name_for_class(scope_key)
+            messagebox.showinfo("Guardado", f"Se guardaron los valores de '{shown_name}'.")
+
+    def on_scope_changed(self, event=None) -> None:
+        selected_display = self.threshold_scope_var.get().strip()
+        new_scope_key = self.scope_display_to_key.get(selected_display, DEFAULT_SCOPE_KEY)
+
+        # Intentar guardar lo actual antes de cambiar
+        try:
+            self.save_current_scope_values(show_message=False)
+        except Exception as e:
+            # Restaurar selección previa si falla la validación
+            prev_display = self._display_name_for_class(self.current_scope_key)
+            self.threshold_scope_var.set(prev_display)
+            messagebox.showerror("Error", f"No se pudo cambiar de selección porque los valores actuales no son válidos.\n\n{e}")
+            return
+
+        self.current_scope_key = new_scope_key
+        self._load_scope_values_into_editor(new_scope_key)
+
+    def _get_default_detection_params(self) -> tuple[int, int, bool]:
+        # Asegura que el editor actual quede persistido antes de leer defaults
+        self.save_current_scope_values(show_message=False)
+
+        threshold = int(self.default_threshold_var.get().strip())
+        min_fg = int(self.default_min_fg_var.get().strip())
         enable_hflip = bool(self.flip_var.get())
 
         if not (0 <= threshold <= 255):
@@ -404,12 +388,22 @@ class AugmentApp(tk.Tk):
 
     def _update_class_config_label(self) -> None:
         if not self.class_params:
-            self.class_config_info_var.set("Sin configuración por clase aplicada.")
+            self.class_config_info_var.set(
+                "Default activo: "
+                f"threshold={self.default_threshold_var.get()}, "
+                f"min_fg={self.default_min_fg_var.get()}\n"
+                "Sin configuración específica por clase."
+            )
             return
 
-        lines = ["Configuración por clase activa:"]
+        lines = [
+            "Default activo: "
+            f"threshold={self.default_threshold_var.get()}, "
+            f"min_fg={self.default_min_fg_var.get()}",
+            "Configuración específica por clase:"
+        ]
         for class_name, data in sorted(self.class_params.items()):
-            shown_name = "(root)" if class_name == ROOT_CLASS_NAME else class_name
+            shown_name = self._display_name_for_class(class_name)
             lines.append(
                 f"- {shown_name}: threshold={data['white_threshold']}, min_fg={data['min_foreground_pixels']}"
             )
@@ -420,6 +414,7 @@ class AugmentApp(tk.Tk):
         if folder:
             self.input_dir_var.set(folder)
             self.refresh_original_list()
+            self._refresh_scope_options()
 
     def select_output_dir(self) -> None:
         folder = filedialog.askdirectory(title="Selecciona la carpeta output")
@@ -439,7 +434,7 @@ class AugmentApp(tk.Tk):
             for p in self.original_image_paths:
                 self.original_listbox.insert("end", str(p.relative_to(input_dir)))
 
-            self._update_class_config_label()
+            self._refresh_scope_options()
 
             if not self.original_image_paths:
                 self.clear_original_preview()
@@ -496,7 +491,7 @@ class AugmentApp(tk.Tk):
                 return
 
             input_dir = Path(self.input_dir_var.get().strip())
-            global_threshold, global_min_fg, _ = self._get_detection_params()
+            global_threshold, global_min_fg, _ = self._get_default_detection_params()
 
             class_name = get_class_name(input_dir, image_path)
             class_params = self.class_params.get(class_name, {})
@@ -515,7 +510,7 @@ class AugmentApp(tk.Tk):
             self.original_preview_photo = ImageTk.PhotoImage(preview)
             self.original_preview_label.configure(image=self.original_preview_photo, text="")
 
-            shown_class = "(root)" if class_name == ROOT_CLASS_NAME else class_name
+            shown_class = self._display_name_for_class(class_name)
 
             if bbox is None:
                 self.original_preview_info_var.set(
@@ -561,7 +556,7 @@ class AugmentApp(tk.Tk):
 
             x1, y1, x2, y2 = [round(float(v), 2) for v in bbox]
             class_name = data.get("class_name", "desconocida")
-            shown_class = "(root)" if class_name == ROOT_CLASS_NAME else class_name
+            shown_class = self._display_name_for_class(class_name)
             white_threshold = data.get("white_threshold")
             min_fg = data.get("min_foreground_pixels")
 
@@ -601,7 +596,7 @@ class AugmentApp(tk.Tk):
             output_dir = Path(self.output_dir_var.get().strip())
             copies = int(self.copies_var.get().strip())
             seed = int(self.seed_var.get().strip())
-            threshold, min_fg, enable_hflip = self._get_detection_params()
+            threshold, min_fg, enable_hflip = self._get_default_detection_params()
 
             if not input_dir.exists():
                 raise FileNotFoundError("La carpeta input no existe.")
@@ -626,7 +621,7 @@ class AugmentApp(tk.Tk):
 
             class_lines = ["Mapa de clases:"]
             for class_name, class_id in class_to_id.items():
-                shown_name = "(root)" if class_name == ROOT_CLASS_NAME else class_name
+                shown_name = self._display_name_for_class(class_name)
                 class_lines.append(f"- {shown_name}: {class_id}")
 
             skipped_msg = ""

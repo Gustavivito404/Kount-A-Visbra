@@ -1,10 +1,13 @@
-Versión 5 del proyecto:
-- Las notas ya no saturan la interfaz: ahora se abren en una ventana aparte
-- Entre las dos visualizaciones centrales se agregó el botón "Actualizar previsualización original"
-- Se agregó una ventana para configurar umbrales por clase
-- La clase se detecta por la primera carpeta dentro de input
-- Los parámetros por clase sobrescriben a los globales
-- Los labels JSON guardan también el threshold y min_fg usados
+Versión 6 del proyecto:
+- Las notas siguen en una ventana aparte
+- El botón de actualizar previsualización original queda entre ambas visualizaciones
+- La configuración de umbrales por clase ya no abre una ventana aparte
+- Ahora se edita en el mismo panel izquierdo con un selector tipo desplegable
+- Puedes elegir:
+  - General / default
+  - cada clase detectada en input
+- Los cuadros de umbral y mínimo de pixeles cambian según la selección actual
+- Puedes guardar los valores específicos de cada selección desde el mismo lugar
 
 Ejecución:
     python src/gui_app.py
