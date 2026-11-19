@@ -1,0 +1,43 @@
+# Archivos personales, datos de entrenamiento y resultados
+config/*
+!config/.gitkeep
+profiles/*
+!profiles/.gitkeep
+**/users.json
+**/ui_session_config.json
+**/profiles_location.json
+**/appearance.json
+**/work_sequence.json
+**/augment_thresholds_config.json
+**/.aug_manifest.json
+input/
+output/
+data/
+weights/
+models/
+checkpoints/
+runs/
+datasets/
+*.pt
+*.pth
+*.onnx
+*.engine
+*.ckpt
+*.safetensors
+# Entorno y cachés
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+!.env.example
+# Ficheros locales de IDE
+.vscode/
+.idea/
