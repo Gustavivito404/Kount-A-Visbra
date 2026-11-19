@@ -1,14 +1,14 @@
-# Visbra / Kount-A — v2.13.0
+# Visbra / Kount-A — v2.14.0
 
 **Reconstrucción documental de la entrega histórica de Visbra.**
 
-- **Etiqueta técnica:** `v2.13.0`
+- **Etiqueta técnica:** `v2.14.0`
 - **Etapa:** 2 de 3
-- **Versión original del proyecto:** 13
+- **Versión original del proyecto:** 14
 - **Revisión documentada:** 0
-- **Cambio principal:** Se amplían ajustes de aumento de datos: iluminación, color y ruido visual.
-- **Procedencia:** `augment_gui_project_v13`
-- **Nota:** README_CAMBIOS.md; el README principal conserva título v12.
+- **Cambio principal:** Transición al flujo YOLO, etiquetado multiobjeto y administración de BBox.
+- **Procedencia:** `KountA_YOLO_v14`
+- **Nota:** Los pesos preentrenados y entrenados se excluyen.
 
 La numeración de GitHub es una convención documental personalizada, **no implica compatibilidad con versionado semántico estándar**. Los commits y las etiquetas fueron reconstruidos a partir de archivos proporcionados y **no representan fechas originales de desarrollo**.
 

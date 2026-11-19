@@ -1,1 +1,1 @@
-"""Código fuente de Augment GUI Project v11."""
+"""Kount-A: anotación, aumentación y detección con YOLO."""
