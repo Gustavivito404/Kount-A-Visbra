@@ -62,6 +62,9 @@ class KountApp(tk.Tk):
         self.current_image = None
         self.current_pil = None
         self.current_objects = []
+        # Solo controla la visualización; no altera las anotaciones guardadas.
+        # Al abrir una imagen se mostrarán todas sus BBox.
+        self.visible_bbox_indices = set()
         self.selected_bbox = -1
         self.dirty = False
         self.image_files = []
@@ -274,6 +277,8 @@ class KountApp(tk.Tk):
         self.train_aug = tk.BooleanVar(value=True)
         self.train_mosaic = tk.StringVar(value='0.25')
         self.test_model = tk.StringVar()
+        self.test_model_caption = tk.StringVar(value='Modelo: sin seleccionar')
+        self.test_model.trace_add('write',self._update_test_model_caption)
         self.test_source = tk.StringVar(value='Sin imagen seleccionada.')
         self.test_conf = tk.StringVar(value='0.50')
         self.test_iou = tk.StringVar(value='0.45')
@@ -345,6 +350,10 @@ class KountApp(tk.Tk):
             self.view_mode='operator'
         else:
             self.view_mode='engineer'
+        if getattr(self,'test_popup',None) is not None and self.test_popup.winfo_exists():
+            self.test_popup.destroy()
+            self.test_popup=None
+            self.test_popup_canvas=None
         self.workspace.destroy()
         visible=self._visible_profiles()
         if not self.active_profile or self.active_profile['id'] not in {p['id'] for p in visible}:
@@ -394,6 +403,7 @@ class KountApp(tk.Tk):
         self.output_var.set('')
         self.current_image=self.current_pil=None
         self.current_objects=[]
+        self.visible_bbox_indices.clear()
         self.image_files=[]
         self.test_image=self.test_display_image=None
         self.test_detections=[]
@@ -420,6 +430,10 @@ class KountApp(tk.Tk):
         if self._engineering_view():
             try:self._save_session()
             except OSError:pass
+        if getattr(self,'test_popup',None) is not None and self.test_popup.winfo_exists():
+            self.test_popup.destroy()
+            self.test_popup=None
+            self.test_popup_canvas=None
         self.workspace.destroy()
         self.username=self.role=None
         self.active_profile=None
@@ -458,6 +472,7 @@ class KountApp(tk.Tk):
         self.output_var.set(str(folder/'output'))
         self.current_image=self.current_pil=None
         self.current_objects=[]
+        self.visible_bbox_indices.clear()
         self.dirty=False
         self.test_image=None
         self.test_display_image=None
@@ -885,40 +900,8 @@ class KountApp(tk.Tk):
         except Exception as exc:messagebox.showerror('Calibración',str(exc))
 
     def _build_operator_tab(self,tab):
-        tab.columnconfigure(0,weight=7);tab.columnconfigure(1,weight=3);tab.rowconfigure(1,weight=1)
-        bar=ttk.LabelFrame(tab,text='Cámara y operación',padding=12)
-        bar.grid(row=0,column=0,columnspan=2,sticky='ew',pady=5)
-        ttk.Button(bar,text='Buscar cámaras',command=self._start_camera_scan).grid(row=0,column=0,padx=5,pady=5)
-        self.camera_combo=ttk.Combobox(bar,textvariable=self.camera_choice,state='readonly',width=42)
-        self.camera_combo.grid(row=0,column=1,columnspan=3,sticky='ew',padx=5)
-        ttk.Label(bar,text='Ancho').grid(row=0,column=4,padx=3)
-        ttk.Entry(bar,textvariable=self.camera_width,width=8).grid(row=0,column=5)
-        ttk.Label(bar,text='Alto').grid(row=0,column=6,padx=3)
-        ttk.Entry(bar,textvariable=self.camera_height,width=8).grid(row=0,column=7)
-        ttk.Label(bar,text='Modo').grid(row=1,column=0,padx=4)
-        self.test_mode_combo=ttk.Combobox(bar,textvariable=self.test_mode,values=('Combinado','Comparativo'),state='readonly',width=18)
-        self.test_mode_combo.grid(row=1,column=1,sticky='w',padx=5)
-        ttk.Button(bar,text='CAPTURAR Y ANALIZAR',style='Primary.TButton',
-                   command=lambda:self._start_capture(True)).grid(row=1,column=2,columnspan=2,sticky='ew',padx=5,pady=9)
-        ttk.Checkbutton(bar,text='Enfoque automático',variable=self.camera_autofocus).grid(row=2,column=0,columnspan=2,sticky='w',pady=5)
-        ttk.Label(bar,text='Foco manual (0–255)').grid(row=2,column=2,sticky='w')
-        ttk.Entry(bar,textvariable=self.camera_focus,width=8).grid(row=2,column=3,sticky='w')
-        ttk.Label(bar,textvariable=self.test_source,wraplength=700).grid(row=3,column=0,columnspan=8,sticky='w',pady=5)
-        bar.columnconfigure(3,weight=1)
-        show=ttk.LabelFrame(tab,text='Fotografía y detecciones',padding=8)
-        show.grid(row=1,column=0,sticky='nsew',padx=4)
-        show.columnconfigure(0,weight=1);show.rowconfigure(0,weight=1)
-        self.test_canvas=tk.Canvas(show,highlightthickness=0)
-        self.test_canvas.grid(row=0,column=0,sticky='nsew')
-        self.test_canvas.bind('<Configure>',lambda _e:self._rerender_test())
-        result=ttk.LabelFrame(tab,text='Resultados del lote',padding=10)
-        result.grid(row=1,column=1,sticky='nsew',padx=4)
-        result.columnconfigure(0,weight=1);result.rowconfigure(1,weight=1)
-        self.test_summary=tk.StringVar(value='Listo para comenzar.')
-        ttk.Label(result,textvariable=self.test_summary,font=('Segoe UI',15,'bold'),
-                  wraplength=320).grid(row=0,column=0,sticky='w',pady=7)
-        self.test_details=tk.Text(result,state='disabled',wrap='word',width=37)
-        self.test_details.grid(row=1,column=0,sticky='nsew')
+        # Misma zona de imagen ampliada; controles de operación simplificados.
+        self._build_inspection_workspace(tab,operator=True)
 
     def _refresh_operator_profiles(self):
         self._refresh_profile_selector()
@@ -1006,13 +989,28 @@ class KountApp(tk.Tk):
         boxes = ttk.LabelFrame(right, text='Objetos de la fotografía', padding=6)
         boxes.grid(row=2, column=0, sticky='nsew', pady=(5, 0))
         right.rowconfigure(2, weight=1)
-        self.box_tree = ttk.Treeview(boxes, columns=('clase', 'xyxy'), show='headings', height=5)
+        # Acciones de visibilidad: afectan solo a la previsualización del editor.
+        visibility_controls = ttk.Frame(boxes)
+        visibility_controls.pack(fill='x', pady=(0, 4))
+        for col in range(3):
+            visibility_controls.columnconfigure(col, weight=1)
+        ttk.Button(visibility_controls, text='Mostrar todas', command=self._show_all_bbox).grid(
+            row=0, column=0, sticky='ew', padx=(0, 2))
+        ttk.Button(visibility_controls, text='Ocultar todas', command=self._hide_all_bbox).grid(
+            row=0, column=1, sticky='ew', padx=2)
+        ttk.Button(visibility_controls, text='Solo esta', command=self._show_only_selected_bbox).grid(
+            row=0, column=2, sticky='ew', padx=(2, 0))
+        self.box_tree = ttk.Treeview(boxes, columns=('clase', 'xyxy', 'visible'), show='headings', height=5)
         self.box_tree.heading('clase', text='Clase')
         self.box_tree.heading('xyxy', text='BBox XYXY')
-        self.box_tree.column('clase', width=130)
-        self.box_tree.column('xyxy', width=175)
+        self.box_tree.heading('visible', text='Ver')
+        self.box_tree.column('clase', width=105, minwidth=75, stretch=True)
+        self.box_tree.column('xyxy', width=150, minwidth=110, stretch=True)
+        self.box_tree.column('visible', width=44, minwidth=38, stretch=False, anchor='center')
         self.box_tree.pack(fill='both', expand=True)
         self.box_tree.bind('<<TreeviewSelect>>', self._on_box_select)
+        self.box_tree.bind('<Button-1>', self._on_bbox_visibility_click, add='+')
+        ttk.Label(boxes, text='Clic en «Ver» para mostrar u ocultar una BBox.').pack(anchor='w', pady=(3, 0))
         self._show_bbox_mode()
 
     def _show_bbox_mode(self, _event=None):
@@ -1113,56 +1111,173 @@ class KountApp(tk.Tk):
         self.last_trained = None
 
     def _build_test_tab(self, tab):
-        tab.columnconfigure(0, weight=7)
-        tab.columnconfigure(1, weight=3)
-        tab.rowconfigure(1, weight=1)
-        toolbar = ttk.LabelFrame(tab, text='Modelo, imágenes y cámaras', padding=9)
-        toolbar.grid(row=0, column=0, columnspan=2, sticky='ew', pady=5)
-        ttk.Label(toolbar, text='Modelo YOLO').grid(row=0, column=0, sticky='w')
-        ttk.Entry(toolbar, textvariable=self.test_model, width=45).grid(row=0, column=1, columnspan=3, sticky='ew', padx=4)
-        ttk.Button(toolbar, text='Buscar best.pt', command=lambda: self._choose_model(self.test_model)).grid(row=0, column=4)
-        ttk.Button(toolbar, text='Abrir fotografía', command=self._test_open).grid(row=1, column=0, pady=5)
-        ttk.Button(toolbar, text='Contar objetos', command=self._start_test_count).grid(row=1, column=1, pady=5)
-        ttk.Label(toolbar, text='Conf.').grid(row=1, column=2)
-        ttk.Entry(toolbar, textvariable=self.test_conf, width=7).grid(row=1, column=3, sticky='w')
-        ttk.Label(toolbar, text='IoU NMS').grid(row=1, column=4)
-        ttk.Entry(toolbar, textvariable=self.test_iou, width=7).grid(row=1, column=5, sticky='w')
-        ttk.Label(toolbar, text='Máx.').grid(row=1, column=6)
-        ttk.Entry(toolbar, textvariable=self.test_maxdet, width=6).grid(row=1, column=7, sticky='w')
-        ttk.Separator(toolbar, orient='horizontal').grid(row=2, column=0, columnspan=8, sticky='ew', pady=7)
-        ttk.Button(toolbar, text='Buscar cámaras conectadas', command=self._start_camera_scan).grid(row=3, column=0)
-        self.camera_combo = ttk.Combobox(toolbar, textvariable=self.camera_choice, state='readonly', width=40)
-        self.camera_combo.grid(row=3, column=1, columnspan=3, sticky='ew', padx=4)
-        ttk.Label(toolbar, text='W').grid(row=3, column=4)
-        ttk.Entry(toolbar, textvariable=self.camera_width, width=7).grid(row=3, column=5)
-        ttk.Label(toolbar, text='H').grid(row=3, column=6)
-        ttk.Entry(toolbar, textvariable=self.camera_height, width=7).grid(row=3, column=7)
-        ttk.Button(toolbar, text='Capturar foto', command=lambda: self._start_capture(False)).grid(row=4, column=0, pady=5)
-        ttk.Button(toolbar, text='Capturar y contar', command=lambda: self._start_capture(True)).grid(row=4, column=1, pady=5)
-        ttk.Label(toolbar, textvariable=self.test_source, wraplength=900).grid(row=4, column=2, columnspan=6, sticky='w')
-        ttk.Checkbutton(toolbar, text='Enfoque automático',variable=self.camera_autofocus).grid(row=6,column=0,columnspan=2,sticky='w',pady=4)
-        ttk.Label(toolbar,text='Foco manual (0–255)').grid(row=6,column=2,columnspan=2)
-        ttk.Entry(toolbar,textvariable=self.camera_focus,width=7).grid(row=6,column=4,sticky='w')
-        ttk.Label(toolbar, text='Modo').grid(row=5, column=0, sticky='w', pady=4)
-        self.test_mode_combo=ttk.Combobox(toolbar, textvariable=self.test_mode, values=('Combinado','Comparativo'), state='readonly', width=20)
-        self.test_mode_combo.grid(row=5,column=1,sticky='w')
-        toolbar.columnconfigure(1, weight=1)
-        show = ttk.LabelFrame(tab, text='Imagen y detecciones', padding=6)
-        show.grid(row=1, column=0, sticky='nsew', padx=3)
-        show.rowconfigure(0, weight=1)
-        show.columnconfigure(0, weight=1)
-        self.test_canvas = tk.Canvas(show, bg='#282C32', highlightthickness=0)
-        self.test_canvas.grid(row=0, column=0, sticky='nsew')
-        self.test_canvas.bind('<Configure>', lambda _e: self._rerender_test())
-        result = ttk.LabelFrame(tab, text='Conteo por clase y detalles', padding=10)
-        result.grid(row=1, column=1, sticky='nsew', padx=3)
-        result.rowconfigure(1, weight=1)
-        result.columnconfigure(0, weight=1)
-        self.test_summary = tk.StringVar(value='Sin conteo.')
-        ttk.Label(result, textvariable=self.test_summary, font=('Segoe UI', 12, 'bold'),
-                  wraplength=360).grid(row=0, column=0, sticky='w', pady=5)
-        self.test_details = tk.Text(result, wrap='word', state='disabled', width=36)
-        self.test_details.grid(row=1, column=0, sticky='nsew')
+        # La fotografía ocupa la columna ancha, sin controles horizontales encima.
+        self._build_inspection_workspace(tab,operator=False)
+
+    def _build_inspection_workspace(self,tab,operator=False):
+        """Panel estrecho de operación a la izquierda; fotografía grande a la derecha."""
+        tab.columnconfigure(0,weight=3,minsize=288)
+        tab.columnconfigure(1,weight=8,minsize=420)
+        tab.rowconfigure(0,weight=1)
+
+        sidebar=ttk.Frame(tab)
+        sidebar.grid(row=0,column=0,sticky='nsew',padx=(1,5),pady=2)
+        sidebar.columnconfigure(0,weight=1)
+        sidebar.rowconfigure(1,weight=1)
+
+        controls=ttk.LabelFrame(sidebar,text='Cámara y operaciones' if operator else 'Modelo, cámara y operaciones',padding=7)
+        controls.grid(row=0,column=0,sticky='ew')
+        controls.columnconfigure(0,weight=1)
+        controls.columnconfigure(1,weight=1)
+
+        row=0
+        if not operator:
+            model_row=ttk.Frame(controls)
+            model_row.grid(row=row,column=0,columnspan=2,sticky='ew',pady=(0,4))
+            model_row.columnconfigure(0,weight=1)
+            ttk.Label(model_row,textvariable=self.test_model_caption,wraplength=205).grid(row=0,column=0,sticky='w')
+            ttk.Button(model_row,text='Elegir modelo…',command=lambda:self._choose_model(self.test_model)).grid(row=0,column=1,padx=(3,0))
+            row+=1
+
+            # Contar: analiza la fotografía actual. Abrir: no ejecuta el modelo.
+            ttk.Button(controls,text='Abrir fotografía',command=self._test_open).grid(row=row,column=0,sticky='ew',padx=(0,3),pady=3)
+            ttk.Button(controls,text='Contar objetos',command=self._start_test_count).grid(row=row,column=1,sticky='ew',padx=(3,0),pady=3)
+            row+=1
+
+        camera_row=ttk.Frame(controls)
+        camera_row.grid(row=row,column=0,columnspan=2,sticky='ew',pady=(3,4))
+        camera_row.columnconfigure(0,weight=1)
+        self.camera_combo=ttk.Combobox(camera_row,textvariable=self.camera_choice,state='readonly',width=16)
+        self.camera_combo.grid(row=0,column=0,sticky='ew',padx=(0,3))
+        ttk.Button(camera_row,text='Buscar cámaras',command=self._start_camera_scan).grid(row=0,column=1,sticky='e')
+        row+=1
+
+        if operator:
+            ttk.Button(controls,text='CAPTURAR Y ANALIZAR',style='Primary.TButton',
+                       command=lambda:self._start_capture(True)).grid(row=row,column=0,columnspan=2,sticky='ew',pady=(3,5))
+        else:
+            ttk.Button(controls,text='Capturar foto',command=lambda:self._start_capture(False)).grid(row=row,column=0,sticky='ew',padx=(0,3),pady=(3,5))
+            ttk.Button(controls,text='CAPTURAR Y CONTAR',style='Primary.TButton',
+                       command=lambda:self._start_capture(True)).grid(row=row,column=1,sticky='ew',padx=(3,0),pady=(3,5))
+        row+=1
+
+        mode_row=ttk.Frame(controls)
+        mode_row.grid(row=row,column=0,columnspan=2,sticky='ew',pady=(2,3))
+        mode_row.columnconfigure(1,weight=1)
+        ttk.Label(mode_row,text='Modo:').grid(row=0,column=0,sticky='w',padx=(0,5))
+        self.test_mode_combo=ttk.Combobox(mode_row,textvariable=self.test_mode,
+                                           values=('Combinado','Comparativo'),state='readonly',width=15)
+        self.test_mode_combo.grid(row=0,column=1,sticky='ew')
+        row+=1
+
+        ttk.Checkbutton(controls,text='Enfoque automático',variable=self.camera_autofocus,
+                        command=self._sync_manual_focus).grid(row=row,column=0,columnspan=2,sticky='w',pady=(1,2))
+        row+=1
+
+        # Resolución, foco manual y parámetros avanzados permanecen accesibles.
+        self.test_advanced_toggle=ttk.Button(controls,text='▸ Ajustes avanzados',command=self._toggle_test_advanced)
+        self.test_advanced_toggle.grid(row=row,column=0,columnspan=2,sticky='ew',pady=(3,1))
+        row+=1
+        advanced=ttk.Frame(controls)
+        advanced.grid(row=row,column=0,columnspan=2,sticky='ew',pady=(2,3))
+        advanced.columnconfigure(1,weight=1)
+        advanced.columnconfigure(3,weight=1)
+        ttk.Label(advanced,text='Resolución:').grid(row=0,column=0,sticky='w',pady=2)
+        ttk.Entry(advanced,textvariable=self.camera_width,width=8).grid(row=0,column=1,sticky='ew',padx=3)
+        ttk.Label(advanced,text='×').grid(row=0,column=2)
+        ttk.Entry(advanced,textvariable=self.camera_height,width=8).grid(row=0,column=3,sticky='ew',padx=3)
+        ttk.Label(advanced,text='Foco manual:').grid(row=1,column=0,sticky='w',pady=2)
+        self.test_manual_focus_entry=ttk.Entry(advanced,textvariable=self.camera_focus,width=8)
+        self.test_manual_focus_entry.grid(row=1,column=1,sticky='w',padx=3)
+        ttk.Label(advanced,text='(0–255)').grid(row=1,column=2,columnspan=2,sticky='w')
+        if not operator:
+            ttk.Label(advanced,text='Confianza:').grid(row=2,column=0,sticky='w',pady=2)
+            ttk.Entry(advanced,textvariable=self.test_conf,width=8).grid(row=2,column=1,sticky='ew',padx=3)
+            ttk.Label(advanced,text='IoU NMS:').grid(row=2,column=2,sticky='w')
+            ttk.Entry(advanced,textvariable=self.test_iou,width=8).grid(row=2,column=3,sticky='ew',padx=3)
+            ttk.Label(advanced,text='Máx. detecciones:').grid(row=3,column=0,columnspan=2,sticky='w',pady=2)
+            ttk.Entry(advanced,textvariable=self.test_maxdet,width=8).grid(row=3,column=3,sticky='ew',padx=3)
+        advanced.grid_remove()
+        self.test_advanced_frame=advanced
+        self._sync_manual_focus()
+
+        result=ttk.LabelFrame(sidebar,text='Conteo por clase y detalles' if not operator else 'Resultados del lote',padding=7)
+        result.grid(row=1,column=0,sticky='nsew',pady=(5,0))
+        result.columnconfigure(0,weight=1)
+        result.rowconfigure(1,weight=1)
+        self.test_summary=tk.StringVar(value='Listo para comenzar.' if operator else 'Sin conteo.')
+        ttk.Label(result,textvariable=self.test_summary,font=('Segoe UI',12,'bold'),
+                  wraplength=260).grid(row=0,column=0,sticky='ew',pady=(1,5))
+        self.test_details=tk.Text(result,state='disabled',wrap='word',width=25,height=9)
+        self.test_details.grid(row=1,column=0,sticky='nsew')
+
+        show=ttk.LabelFrame(tab,text='Fotografía y detecciones',padding=5)
+        show.grid(row=0,column=1,sticky='nsew',padx=(1,2),pady=2)
+        show.columnconfigure(0,weight=1)
+        show.rowconfigure(1,weight=1)
+        image_toolbar=ttk.Frame(show)
+        image_toolbar.grid(row=0,column=0,sticky='ew',pady=(0,4))
+        ttk.Label(image_toolbar,text='Vista de inspección').pack(side='left')
+        ttk.Button(image_toolbar,text='Ampliar imagen ↗',command=self._open_test_preview).pack(side='right')
+        self.test_canvas=tk.Canvas(show,highlightthickness=0)
+        self.test_canvas.grid(row=1,column=0,sticky='nsew')
+        self.test_canvas.bind('<Configure>',lambda _e:self._rerender_test())
+
+    def _toggle_test_advanced(self):
+        if self.test_advanced_frame.winfo_manager():
+            self.test_advanced_frame.grid_remove()
+            self.test_advanced_toggle.configure(text='▸ Ajustes avanzados')
+        else:
+            self.test_advanced_frame.grid()
+            self.test_advanced_toggle.configure(text='▾ Ocultar ajustes avanzados')
+
+    def _sync_manual_focus(self):
+        entry=getattr(self,'test_manual_focus_entry',None)
+        if entry is not None and entry.winfo_exists():
+            entry.configure(state='disabled' if self.camera_autofocus.get() else 'normal')
+
+    def _update_test_model_caption(self,*_):
+        value=self.test_model.get().strip()
+        if value:
+            basename=Path(value).name
+            self.test_model_caption.set('Modelo: '+(basename if len(basename)<=30 else basename[:27]+'…'))
+        else:
+            self.test_model_caption.set('Modelo: sin seleccionar')
+
+    def _open_test_preview(self):
+        if self.test_image is None and self.test_display_image is None:
+            messagebox.showinfo('Imagen','Primero abre o captura una fotografía.')
+            return
+        if getattr(self,'test_popup',None) is not None and self.test_popup.winfo_exists():
+            self.test_popup.lift()
+            self.test_popup.focus_set()
+            return
+        popup=tk.Toplevel(self)
+        popup.title('Kount-A · Imagen y detecciones ampliadas')
+        sw,sh=self.winfo_screenwidth(),self.winfo_screenheight()
+        popup.geometry(f'{min(1250,max(680,sw-100))}x{min(850,max(450,sh-100))}')
+        popup.minsize(420,300)
+        self.test_popup=popup
+        popup.configure(bg=self._palette()['bg'])
+        canvas=tk.Canvas(popup,highlightthickness=0,bg=self._palette()['canvas'])
+        canvas.pack(fill='both',expand=True,padx=6,pady=6)
+        self.test_popup_canvas=canvas
+        canvas.bind('<Configure>',lambda _e:self._render_test_into(canvas,'test_popup'))
+        def close():
+            self.preview_refs.pop('test_popup',None)
+            self.test_popup_canvas=None
+            self.test_popup=None
+            popup.destroy()
+        popup.protocol('WM_DELETE_WINDOW',close)
+        self._render_test_into(canvas,'test_popup')
+
+    def _render_test_into(self,canvas,key):
+        if self.test_display_image is not None:
+            self._render_image(canvas,self.test_display_image,[],key)
+        else:
+            boxes=[{'class_name':d['class_name'],'bbox_xyxy':d['bbox_xyxy']}
+                   for d in self.test_detections if d['class_name'] in CLASS_NAMES]
+            self._render_image(canvas,self.test_image,boxes,key)
 
     def _get_paths(self):
         raw_in, raw_out = self.input_var.get().strip(), self.output_var.get().strip()
@@ -1241,6 +1356,7 @@ class KountApp(tk.Tk):
             self.current_image = path
             self.current_pil = image
             self.current_objects = read_annotations(input_dir, path, output_dir)
+            self._reset_bbox_visibility()
             self.bbox_class.set(infer_folder_class(path, input_dir))
             self.dirty = False
             self.selected_bbox = -1
@@ -1263,7 +1379,8 @@ class KountApp(tk.Tk):
             return False
 
     def _render_image(self, canvas: tk.Canvas, image: Image.Image | None,
-                      objects: list[dict] | None, key: str, selected: int = -1):
+                      objects: list[dict] | None, key: str, selected: int = -1,
+                      visible_indices: set[int] | None = None):
         canvas.delete('all')
         if image is None:
             canvas.create_text(max(40, canvas.winfo_width() // 2), max(40, canvas.winfo_height() // 2),
@@ -1280,6 +1397,8 @@ class KountApp(tk.Tk):
         canvas.create_image(left, top, image=photo, anchor='nw')
         colors = ['#EC4B47', '#449CFF', '#36D48C', '#F166CF', '#F4A844', '#9D89FF']
         for i, obj in enumerate(objects or []):
+            if visible_indices is not None and i not in visible_indices:
+                continue
             try:
                 x1, y1, x2, y2 = obj['bbox_xyxy']
                 color = '#FFD53F' if i == selected else colors[CLASS_NAMES.index(obj['class_name']) % len(colors)]
@@ -1297,10 +1416,12 @@ class KountApp(tk.Tk):
 
     def _render_editor(self):
         self.editor_view = self._render_image(self.editor_canvas, self.current_pil,
-                                              self.current_objects, 'editor', self.selected_bbox) or {}
+                                              self.current_objects, 'editor', self.selected_bbox,
+                                              self.visible_bbox_indices) or {}
         if self.current_image and self.current_pil:
             self.editor_info.set(f'{self.current_image.name} · {self.current_pil.width}×{self.current_pil.height} '
-                                 f'· {len(self.current_objects)} objeto(s)'
+                                 f'· {len(self.current_objects)} objeto(s) '
+                                 f'· {len(self.visible_bbox_indices)} BBox visibles'
                                  + (' · CAMBIOS SIN GUARDAR' if self.dirty else ' · guardado/sin cambios'))
 
     def _screen_to_image(self, x: float, y: float):
@@ -1352,6 +1473,8 @@ class KountApp(tk.Tk):
             # Clic simple sobre una caja permite seleccionarla.
             self.selected_bbox = -1
             for i in range(len(self.current_objects)-1, -1, -1):
+                if i not in self.visible_bbox_indices:
+                    continue  # Una caja oculta no bloquea la selección desde la imagen.
                 a, b, c, d = self.current_objects[i]['bbox_xyxy']
                 if a <= end[0] <= c and b <= end[1] <= d:
                     self.selected_bbox = i
@@ -1363,21 +1486,67 @@ class KountApp(tk.Tk):
                'bbox_xyxy': [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)]}
         if self.draw_mode.get() == 'Reemplazar seleccionada' and 0 <= self.selected_bbox < len(self.current_objects):
             self.current_objects[self.selected_bbox] = obj
+            self.visible_bbox_indices.add(self.selected_bbox)
         else:
             self.current_objects.append(obj)
             self.selected_bbox = len(self.current_objects)-1
+            # Incluso tras «Ocultar todas», la BBox recién dibujada queda visible.
+            self.visible_bbox_indices.add(self.selected_bbox)
         self.dirty = True
         self._update_box_tree()
         self._render_editor()
 
+    def _reset_bbox_visibility(self):
+        """Todas visibles al cargar una foto; nunca se escribe en los JSON."""
+        self.visible_bbox_indices = set(range(len(self.current_objects)))
+
+    def _show_all_bbox(self):
+        self._reset_bbox_visibility()
+        self._update_box_tree()
+        self._render_editor()
+
+    def _hide_all_bbox(self):
+        self.visible_bbox_indices.clear()
+        self._update_box_tree()
+        self._render_editor()
+
+    def _show_only_selected_bbox(self):
+        if not 0 <= self.selected_bbox < len(self.current_objects):
+            messagebox.showinfo('Visibilidad BBox', 'Selecciona una BBox de la tabla para mostrar solo esa.')
+            return
+        self.visible_bbox_indices = {self.selected_bbox}
+        self._update_box_tree()
+        self._render_editor()
+
+    def _on_bbox_visibility_click(self, event):
+        """Clic en la columna Ver alterna la visibilidad sin eliminar ni editar etiquetas."""
+        if self.box_tree.identify_region(event.x, event.y) != 'cell':
+            return
+        if self.box_tree.identify_column(event.x) != '#3':
+            return
+        row = self.box_tree.identify_row(event.y)
+        if not row:
+            return
+        index = int(row)
+        if index >= len(self.current_objects):
+            return 'break'
+        if index in self.visible_bbox_indices:
+            self.visible_bbox_indices.remove(index)
+        else:
+            self.visible_bbox_indices.add(index)
+        self._update_box_tree()
+        self._render_editor()
+        return 'break'
+
     def _update_box_tree(self):
-        if not hasattr(self, 'box_tree'):
+        if not hasattr(self, 'box_tree') or not self.box_tree.winfo_exists():
             return
         for item in self.box_tree.get_children():
             self.box_tree.delete(item)
         for i, obj in enumerate(self.current_objects):
             self.box_tree.insert('', 'end', iid=str(i), values=(obj['class_name'],
-                                  ', '.join(str(round(float(v))) for v in obj['bbox_xyxy'])))
+                                  ', '.join(str(round(float(v))) for v in obj['bbox_xyxy']),
+                                  'Sí' if i in self.visible_bbox_indices else 'No'))
         if 0 <= self.selected_bbox < len(self.current_objects):
             self.box_tree.selection_set(str(self.selected_bbox))
 
@@ -1385,7 +1554,10 @@ class KountApp(tk.Tk):
         ids = self.box_tree.selection()
         if not ids:
             return
-        self.selected_bbox = int(ids[0])
+        index = int(ids[0])
+        if not 0 <= index < len(self.current_objects):
+            return
+        self.selected_bbox = index
         self.bbox_class.set(self.current_objects[self.selected_bbox]['class_name'])
         self._render_editor()
 
@@ -1398,7 +1570,13 @@ class KountApp(tk.Tk):
 
     def _delete_selected(self):
         if 0 <= self.selected_bbox < len(self.current_objects):
-            self.current_objects.pop(self.selected_bbox)
+            deleted = self.selected_bbox
+            self.current_objects.pop(deleted)
+            # Mantener las referencias de visibilidad al compactar la lista.
+            self.visible_bbox_indices = {
+                i if i < deleted else i-1
+                for i in self.visible_bbox_indices if i != deleted
+            }
             self.selected_bbox = -1
             self.dirty = True
             self._update_box_tree()
@@ -1416,7 +1594,10 @@ class KountApp(tk.Tk):
                 if not messagebox.askyesno('Sustituir BBox', '¿Sustituir todas las BBox de esta foto por las propuestas en gris?'):
                     return
                 self.current_objects = []
+                self.visible_bbox_indices.clear()
+            first_new = len(self.current_objects)
             self.current_objects += [{'class_name': self.bbox_class.get(), 'bbox_xyxy': b} for b in boxes]
+            self.visible_bbox_indices.update(range(first_new, len(self.current_objects)))
             self.dirty = True
             self.selected_bbox = -1
             self._update_box_tree()
@@ -1743,12 +1924,12 @@ class KountApp(tk.Tk):
             messagebox.showerror('Imagen', str(exc))
 
     def _rerender_test(self):
-        if self.test_display_image is not None:
-            self._render_image(self.test_canvas,self.test_display_image,[], 'test')
-        else:
-            boxes = [{'class_name': d['class_name'], 'bbox_xyxy': d['bbox_xyxy']}
-                     for d in self.test_detections if d['class_name'] in CLASS_NAMES]
-            self._render_image(self.test_canvas, self.test_image, boxes, 'test')
+        if hasattr(self,'test_canvas') and self.test_canvas.winfo_exists():
+            self._render_test_into(self.test_canvas,'test')
+        popup=getattr(self,'test_popup',None)
+        canvas=getattr(self,'test_popup_canvas',None)
+        if popup is not None and popup.winfo_exists() and canvas is not None and canvas.winfo_exists():
+            self._render_test_into(canvas,'test_popup')
 
     def _start_test_count(self):
         if self.test_image is None:
@@ -1884,6 +2065,7 @@ class KountApp(tk.Tk):
                     if self.current_image and not self.dirty:
                         inp, out = self._get_paths()
                         self.current_objects = read_annotations(inp, self.current_image, out)
+                        self._reset_bbox_visibility()
                         self._update_box_tree()
                         self._render_editor()
                 elif event == 'prelabel_batch_progress':
@@ -1895,12 +2077,14 @@ class KountApp(tk.Tk):
                     if self.current_image and not self.dirty:
                         inp,out=self._get_paths()
                         self.current_objects=read_annotations(inp,self.current_image,out)
+                        self._reset_bbox_visibility()
                         self._update_box_tree()
                         self._render_editor()
                     messagebox.showinfo('Preetiquetado YOLO',self.status_var.get())
                 elif event == 'prelabel_done':
                     if self.current_image == data['path']:
                         self.current_objects = data['objects']
+                        self._reset_bbox_visibility()
                         self.dirty = True
                         self.selected_bbox = -1
                         self._update_box_tree()

@@ -1,14 +1,14 @@
-# Visbra / Kount-A — v3.15.2
+# Visbra / Kount-A — v3.15.3
 
 **Reconstrucción documental de la entrega histórica de Visbra.**
 
-- **Etiqueta técnica:** `v3.15.2`
+- **Etiqueta técnica:** `v3.15.3`
 - **Etapa:** 3 de 3
 - **Versión original del proyecto:** 15
-- **Revisión documentada:** 2
-- **Cambio principal:** Ajustes de menús desplegables y organización de la interfaz.
-- **Procedencia:** `KountA_v15_completa_ajuste_menus.zip`
-- **Nota:** ZIP de actualización intermedia con nota de cambio.
+- **Revisión documentada:** 3
+- **Cambio principal:** Refinamientos de v15, incluida visibilidad de BBox y actualización del panel de prueba.
+- **Procedencia:** `Avance cronologico.zip`
+- **Nota:** Código final v15 del archivo cronológico; mismos bytes que v15(1).zip.
 
 La numeración de GitHub es una convención documental personalizada, **no implica compatibilidad con versionado semántico estándar**. Los commits y las etiquetas fueron reconstruidos a partir de archivos proporcionados y **no representan fechas originales de desarrollo**.
 
