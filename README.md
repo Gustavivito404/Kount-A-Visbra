@@ -1,14 +1,14 @@
-# Visbra / Kount-A — v1.8.0
+# Visbra / Kount-A — v1.9.0
 
 **Reconstrucción documental de la entrega histórica de Visbra.**
 
-- **Etiqueta técnica:** `v1.8.0`
+- **Etiqueta técnica:** `v1.9.0`
 - **Etapa:** 1 de 3
-- **Versión original del proyecto:** 8
+- **Versión original del proyecto:** 9
 - **Revisión documentada:** 0
-- **Cambio principal:** Persistencia automática de umbrales y corrección del cambio de clase.
-- **Procedencia:** `augment_gui_project_v8`
-- **Nota:** No se recibió v7 como carpeta independiente.
+- **Cambio principal:** Guardado de última sesión y recuperación de carpetas de entrada/salida.
+- **Procedencia:** `augment_gui_project_v9`
+- **Nota:** README del directorio v9.
 
 La numeración de GitHub es una convención documental personalizada, **no implica compatibilidad con versionado semántico estándar**. Los commits y las etiquetas fueron reconstruidos a partir de archivos proporcionados y **no representan fechas originales de desarrollo**.
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 from pathlib import Path
 import tkinter as tk
@@ -56,10 +57,16 @@ Notas de uso
    - labels JSON
    - originales copiados al output
 
-7. La configuración persistente se guarda en:
+7. La configuración persistente del dataset se guarda en:
    augment_thresholds_config.json
    dentro de la carpeta input.
+
+8. La última ruta de input y output usada por la interfaz se guarda en:
+   ui_session_config.json
+   junto al proyecto de la app.
 """
+
+SESSION_CONFIG_FILENAME = "ui_session_config.json"
 
 
 class NotesWindow(tk.Toplevel):
@@ -109,6 +116,8 @@ class AugmentApp(tk.Tk):
         self._building_scope_values = False
 
         self._build_ui()
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.after(80, self.initialize_from_session)
 
     def _build_ui(self) -> None:
         container = ttk.Frame(self, padding=12)
@@ -196,6 +205,11 @@ class AugmentApp(tk.Tk):
         self.class_config_info_var = tk.StringVar(value="Sin configuración por clase aplicada.")
         ttk.Label(parent, textvariable=self.class_config_info_var, justify="left").pack(anchor="w", pady=(10, 0))
 
+        self.session_info_var = tk.StringVar(
+            value="La sesión recordará la última carpeta input y output usadas."
+        )
+        ttk.Label(parent, textvariable=self.session_info_var, justify="left").pack(anchor="w", pady=(8, 0))
+
     def _build_center_panel(self, parent: ttk.Frame) -> None:
         top = ttk.LabelFrame(parent, text="Original seleccionado con bbox detectada", padding=10)
         top.pack(fill="both", expand=True)
@@ -273,6 +287,60 @@ class AugmentApp(tk.Tk):
 
     def open_notes_window(self) -> None:
         NotesWindow(self)
+
+    def get_project_root(self) -> Path:
+        return Path(__file__).resolve().parent.parent
+
+    def get_session_json_path(self) -> Path:
+        return self.get_project_root() / SESSION_CONFIG_FILENAME
+
+    def load_session_json(self) -> dict:
+        path = self.get_session_json_path()
+        if not path.exists():
+            return {}
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def save_session_json(self) -> Path:
+        path = self.get_session_json_path()
+        payload = {
+            "last_input_dir": self.input_dir_var.get().strip(),
+            "last_output_dir": self.output_dir_var.get().strip(),
+        }
+        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        return path
+
+    def initialize_from_session(self) -> None:
+        data = self.load_session_json()
+        last_input = str(data.get("last_input_dir", "")).strip()
+        last_output = str(data.get("last_output_dir", "")).strip()
+
+        if last_input:
+            self.input_dir_var.set(last_input)
+        if last_output:
+            self.output_dir_var.set(last_output)
+
+        if last_input and Path(last_input).exists():
+            self.load_persisted_config_from_input(ask_about_missing=True)
+            self.refresh_original_list()
+
+        if last_output and Path(last_output).exists():
+            self.refresh_augmented_list()
+
+        if last_input or last_output:
+            self.session_info_var.set(
+                "Sesión cargada: se restauraron las últimas rutas usadas."
+            )
+
+    def on_close(self) -> None:
+        try:
+            self.autosave_current_scope_values(silent=True)
+            self.save_session_json()
+        except Exception:
+            pass
+        self.destroy()
 
     def _get_detection_params(self) -> tuple[int, int, bool]:
         threshold = int(self.threshold_var.get().strip())
@@ -488,6 +556,7 @@ class AugmentApp(tk.Tk):
             self.autosave_current_scope_values(silent=True)
             self.load_persisted_config_from_input(ask_about_missing=True)
             self.refresh_original_list()
+            self.save_session_json()
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
@@ -497,15 +566,21 @@ class AugmentApp(tk.Tk):
             self.input_dir_var.set(folder)
             self.load_persisted_config_from_input(ask_about_missing=True)
             self.refresh_original_list()
-
-            # Si no existe JSON todavía, crear uno inicial con lo que haya cargado
             self.write_config_json()
+            self.save_session_json()
+            self.session_info_var.set(
+                f"Sesión guardada. Último input: {folder}"
+            )
 
     def select_output_dir(self) -> None:
         folder = filedialog.askdirectory(title="Selecciona la carpeta output")
         if folder:
             self.output_dir_var.set(folder)
             self.refresh_augmented_list()
+            self.save_session_json()
+            self.session_info_var.set(
+                f"Sesión guardada. Último output: {folder}"
+            )
 
     def refresh_original_list(self) -> None:
         try:
@@ -698,6 +773,8 @@ class AugmentApp(tk.Tk):
             if copies < 1:
                 raise ValueError("El número de copias debe ser >= 1.")
 
+            self.save_session_json()
+
             summary = generate_augmented_dataset_with_bboxes(
                 input_dir=input_dir,
                 output_dir=output_dir,
@@ -746,6 +823,8 @@ class AugmentApp(tk.Tk):
             output_dir = self._get_output_dir()
             if output_dir is None or not output_dir.exists():
                 raise FileNotFoundError("La carpeta output no existe.")
+
+            self.save_session_json()
 
             summary = clean_generated_dataset(output_dir=output_dir)
 
