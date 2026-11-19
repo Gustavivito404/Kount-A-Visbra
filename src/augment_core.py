@@ -13,7 +13,10 @@ from torchvision.transforms import v2 as T
 from torchvision.tv_tensors import BoundingBoxFormat
 from tqdm import tqdm
 
-from bbox_utils import detect_bbox_white_background, save_bbox_metadata
+try:
+    from .bbox_utils import detect_bbox_white_background, save_bbox_metadata
+except ImportError:
+    from bbox_utils import detect_bbox_white_background, save_bbox_metadata
 
 
 VALID_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}

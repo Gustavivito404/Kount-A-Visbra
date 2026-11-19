@@ -8,23 +8,58 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from augment_core import (
-    CLASS_CONFIG_FILENAME,
-    ROOT_CLASS_NAME,
-    clean_generated_dataset,
-    ensure_rgb,
-    find_images,
-    generate_augmented_dataset_with_bboxes,
-    get_class_name,
-    get_class_names,
-    load_class_config_json,
-    save_class_config_json,
-)
-from bbox_utils import (
-    build_preview_image,
-    detect_bbox_white_background,
-    load_bbox_metadata,
-)
+try:
+    # Ejecución recomendada desde la raíz:
+    # python -m src.gui_app
+    from .augment_core import (
+        CLASS_CONFIG_FILENAME,
+        ROOT_CLASS_NAME,
+        clean_generated_dataset,
+        ensure_rgb,
+        find_images,
+        generate_augmented_dataset_with_bboxes,
+        get_class_name,
+        get_class_names,
+        load_class_config_json,
+        save_class_config_json,
+    )
+    from .bbox_utils import (
+        build_preview_image,
+        detect_bbox_white_background,
+        load_bbox_metadata,
+    )
+    from .classifier_core import (
+        DEFAULT_MODEL_NAME,
+        load_checkpoint_metadata,
+        predict_image,
+        train_classifier,
+    )
+except ImportError:
+    # También permite:
+    # python src/gui_app.py
+    from augment_core import (
+        CLASS_CONFIG_FILENAME,
+        ROOT_CLASS_NAME,
+        clean_generated_dataset,
+        ensure_rgb,
+        find_images,
+        generate_augmented_dataset_with_bboxes,
+        get_class_name,
+        get_class_names,
+        load_class_config_json,
+        save_class_config_json,
+    )
+    from bbox_utils import (
+        build_preview_image,
+        detect_bbox_white_background,
+        load_bbox_metadata,
+    )
+    from classifier_core import (
+        DEFAULT_MODEL_NAME,
+        load_checkpoint_metadata,
+        predict_image,
+        train_classifier,
+    )
 
 
 NOTES_TEXT = """\
@@ -90,7 +125,7 @@ class NotesWindow(tk.Toplevel):
 class AugmentApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Augment Dataset + Bounding Boxes")
+        self.title("Augment Dataset + Clasificador v10")
         self.geometry("1420x830")
         self.minsize(1280, 760)
 
@@ -115,6 +150,21 @@ class AugmentApp(tk.Tk):
 
         self._building_scope_values = False
 
+        # Clasificador de imágenes completas (v10)
+        self.nn_epochs_var = tk.StringVar(value="20")
+        self.nn_batch_var = tk.StringVar(value="32")
+        self.nn_lr_var = tk.StringVar(value="0.001")
+        self.nn_image_size_var = tk.StringVar(value="128")
+        self.nn_val_fraction_var = tk.StringVar(value="0.20")
+        self.nn_seed_var = tk.StringVar(value="42")
+        self.nn_model_path_var = tk.StringVar()
+        self.nn_test_image_var = tk.StringVar()
+        self.nn_status_var = tk.StringVar(value="Listo para entrenar.")
+        self.nn_prediction_var = tk.StringVar(value="Sin predicción.")
+        self.nn_model_info_var = tk.StringVar(value="Sin modelo cargado.")
+        self.nn_test_preview_photo = None
+        self.nn_training = False
+
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.after(80, self.initialize_from_session)
@@ -125,11 +175,20 @@ class AugmentApp(tk.Tk):
 
         ttk.Label(
             container,
-            text="Flujo de augmentación con inspección de originales y augmentadas guardadas",
+            text="Augment Dataset + Clasificador de imágenes",
             font=("Segoe UI", 12, "bold")
         ).pack(anchor="w", pady=(0, 10))
 
-        main = ttk.Panedwindow(container, orient="horizontal")
+        self.notebook = ttk.Notebook(container)
+        self.notebook.pack(fill="both", expand=True)
+
+        augment_tab = ttk.Frame(self.notebook, padding=4)
+        classifier_tab = ttk.Frame(self.notebook, padding=4)
+
+        self.notebook.add(augment_tab, text="1. Dataset / Augmentación")
+        self.notebook.add(classifier_tab, text="2. Red neuronal / Prueba")
+
+        main = ttk.Panedwindow(augment_tab, orient="horizontal")
         main.pack(fill="both", expand=True)
 
         left = ttk.Frame(main, padding=8)
@@ -143,6 +202,9 @@ class AugmentApp(tk.Tk):
         self._build_left_panel(left)
         self._build_center_panel(center)
         self._build_right_panel(right)
+
+        self._build_classifier_tab(classifier_tab)
+
 
     def _build_left_panel(self, parent: ttk.Frame) -> None:
         form = ttk.LabelFrame(parent, text="Configuración general", padding=10)
@@ -285,6 +347,438 @@ class AugmentApp(tk.Tk):
         bottom_scrollbar.pack(fill="y", side="right")
         self.augmented_listbox.configure(yscrollcommand=bottom_scrollbar.set)
 
+    def _build_classifier_tab(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(1, weight=1)
+        parent.rowconfigure(1, weight=1)
+
+        train_frame = ttk.LabelFrame(parent, text="Entrenamiento de clasificación", padding=12)
+        train_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=6, pady=6)
+        train_frame.columnconfigure(1, weight=1)
+        train_frame.columnconfigure(3, weight=1)
+
+        ttk.Label(
+            train_frame,
+            text=(
+                "Usa directamente las imágenes generadas por la pestaña anterior: "
+                "output/original_images + output/augmented_images."
+            ),
+            justify="left"
+        ).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 10))
+
+        ttk.Label(train_frame, text="Dataset (output actual)").grid(row=1, column=0, sticky="w", pady=4)
+        self.nn_dataset_entry = ttk.Entry(
+            train_frame,
+            textvariable=self.output_dir_var,
+            state="readonly",
+            width=55
+        )
+        self.nn_dataset_entry.grid(row=1, column=1, columnspan=3, sticky="ew", padx=6)
+
+        ttk.Label(train_frame, text="Guardar modelo (.pth)").grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.nn_model_path_var).grid(
+            row=2, column=1, columnspan=2, sticky="ew", padx=6
+        )
+        ttk.Button(
+            train_frame,
+            text="Elegir ruta",
+            command=self.select_nn_model_path
+        ).grid(row=2, column=3, sticky="e")
+
+        ttk.Label(train_frame, text="Épocas").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.nn_epochs_var, width=10).grid(
+            row=3, column=1, sticky="w", padx=6
+        )
+
+        ttk.Label(train_frame, text="Batch size").grid(row=3, column=2, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.nn_batch_var, width=10).grid(
+            row=3, column=3, sticky="w", padx=6
+        )
+
+        ttk.Label(train_frame, text="Learning rate").grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.nn_lr_var, width=10).grid(
+            row=4, column=1, sticky="w", padx=6
+        )
+
+        ttk.Label(train_frame, text="Tamaño imagen").grid(row=4, column=2, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.nn_image_size_var, width=10).grid(
+            row=4, column=3, sticky="w", padx=6
+        )
+
+        ttk.Label(train_frame, text="Validación (0-1)").grid(row=5, column=0, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.nn_val_fraction_var, width=10).grid(
+            row=5, column=1, sticky="w", padx=6
+        )
+
+        ttk.Label(train_frame, text="Seed").grid(row=5, column=2, sticky="w", pady=4)
+        ttk.Entry(train_frame, textvariable=self.nn_seed_var, width=10).grid(
+            row=5, column=3, sticky="w", padx=6
+        )
+
+        controls = ttk.Frame(train_frame)
+        controls.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(10, 4))
+
+        self.nn_train_button = ttk.Button(
+            controls,
+            text="Entrenar clasificador",
+            command=self.start_classifier_training
+        )
+        self.nn_train_button.pack(side="left")
+
+        ttk.Button(
+            controls,
+            text="Usar ruta recomendada",
+            command=self.sync_nn_model_path
+        ).pack(side="left", padx=8)
+
+        ttk.Button(
+            controls,
+            text="Leer información del modelo",
+            command=self.refresh_nn_model_info
+        ).pack(side="left")
+
+        self.nn_progress = ttk.Progressbar(
+            train_frame,
+            orient="horizontal",
+            mode="determinate",
+            maximum=100
+        )
+        self.nn_progress.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(8, 4))
+
+        ttk.Label(train_frame, textvariable=self.nn_status_var).grid(
+            row=8, column=0, columnspan=4, sticky="w", pady=(4, 0)
+        )
+        ttk.Label(train_frame, textvariable=self.nn_model_info_var, justify="left").grid(
+            row=9, column=0, columnspan=4, sticky="w", pady=(4, 0)
+        )
+
+        # Zona inferior: prueba de imagen + resultados/log
+        test_frame = ttk.LabelFrame(parent, text="Prueba con una imagen completa", padding=12)
+        test_frame.grid(row=1, column=0, sticky="nsew", padx=6, pady=6)
+        test_frame.columnconfigure(0, weight=1)
+        test_frame.rowconfigure(2, weight=1)
+
+        test_controls = ttk.Frame(test_frame)
+        test_controls.grid(row=0, column=0, sticky="ew")
+
+        ttk.Button(
+            test_controls,
+            text="Seleccionar imagen",
+            command=self.select_nn_test_image
+        ).pack(side="left")
+
+        self.nn_predict_button = ttk.Button(
+            test_controls,
+            text="Clasificar imagen",
+            command=self.start_classifier_prediction
+        )
+        self.nn_predict_button.pack(side="left", padx=8)
+
+        ttk.Label(test_frame, textvariable=self.nn_test_image_var, wraplength=560).grid(
+            row=1, column=0, sticky="w", pady=(8, 6)
+        )
+
+        self.nn_test_preview_label = ttk.Label(
+            test_frame,
+            text="Selecciona una imagen para probar el modelo.",
+            anchor="center",
+            justify="center"
+        )
+        self.nn_test_preview_label.grid(row=2, column=0, sticky="nsew")
+
+        ttk.Label(
+            test_frame,
+            textvariable=self.nn_prediction_var,
+            font=("Segoe UI", 12, "bold"),
+            justify="left"
+        ).grid(row=3, column=0, sticky="w", pady=(10, 4))
+
+        result_frame = ttk.Frame(test_frame)
+        result_frame.grid(row=4, column=0, sticky="ew", pady=(4, 0))
+        result_frame.columnconfigure(0, weight=1)
+
+        self.nn_prob_tree = ttk.Treeview(
+            result_frame,
+            columns=("class", "probability"),
+            show="headings",
+            height=7
+        )
+        self.nn_prob_tree.heading("class", text="Clase")
+        self.nn_prob_tree.heading("probability", text="Probabilidad")
+        self.nn_prob_tree.column("class", width=220, anchor="w")
+        self.nn_prob_tree.column("probability", width=140, anchor="center")
+        self.nn_prob_tree.grid(row=0, column=0, sticky="ew")
+
+        tree_scroll = ttk.Scrollbar(
+            result_frame,
+            orient="vertical",
+            command=self.nn_prob_tree.yview
+        )
+        tree_scroll.grid(row=0, column=1, sticky="ns")
+        self.nn_prob_tree.configure(yscrollcommand=tree_scroll.set)
+
+        log_frame = ttk.LabelFrame(parent, text="Registro de entrenamiento", padding=12)
+        log_frame.grid(row=1, column=1, sticky="nsew", padx=6, pady=6)
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+
+        self.nn_log_text = tk.Text(log_frame, wrap="word")
+        self.nn_log_text.grid(row=0, column=0, sticky="nsew")
+        self.nn_log_text.configure(state="disabled")
+
+        log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.nn_log_text.yview)
+        log_scroll.grid(row=0, column=1, sticky="ns")
+        self.nn_log_text.configure(yscrollcommand=log_scroll.set)
+
+        self.after(150, self.sync_nn_model_path)
+
+    def sync_nn_model_path(self) -> None:
+        output_dir = self._get_output_dir()
+        if output_dir is None:
+            if not self.nn_model_path_var.get().strip():
+                self.nn_model_path_var.set("")
+            return
+
+        recommended = output_dir / "models" / DEFAULT_MODEL_NAME
+        current = self.nn_model_path_var.get().strip()
+
+        if not current:
+            self.nn_model_path_var.set(str(recommended))
+            return
+
+        current_path = Path(current)
+        # Si todavía apunta al modelo recomendado de otro output, actualízalo.
+        if current_path.name == DEFAULT_MODEL_NAME and current_path.parent.name == "models":
+            self.nn_model_path_var.set(str(recommended))
+
+    def select_nn_model_path(self) -> None:
+        self.sync_nn_model_path()
+        initial = self.nn_model_path_var.get().strip()
+        initial_dir = str(Path(initial).parent) if initial else str(Path.cwd())
+
+        path = filedialog.asksaveasfilename(
+            title="Guardar modelo de clasificación",
+            defaultextension=".pth",
+            filetypes=[("PyTorch model", "*.pth"), ("Todos los archivos", "*.*")],
+            initialdir=initial_dir,
+            initialfile=Path(initial).name if initial else DEFAULT_MODEL_NAME,
+        )
+        if path:
+            self.nn_model_path_var.set(path)
+
+    def append_nn_log(self, text: str) -> None:
+        self.nn_log_text.configure(state="normal")
+        self.nn_log_text.insert("end", text.rstrip() + "\n")
+        self.nn_log_text.see("end")
+        self.nn_log_text.configure(state="disabled")
+
+    def start_classifier_training(self) -> None:
+        if self.nn_training:
+            messagebox.showinfo("Entrenamiento", "Ya hay un entrenamiento en curso.")
+            return
+        threading.Thread(target=self.classifier_training_action, daemon=True).start()
+
+    def classifier_training_action(self) -> None:
+        try:
+            output_dir = self._get_output_dir()
+            if output_dir is None or not output_dir.exists():
+                raise FileNotFoundError(
+                    "Selecciona primero el output del dataset en la pestaña de augmentación."
+                )
+
+            self.sync_nn_model_path()
+            model_path_raw = self.nn_model_path_var.get().strip()
+            if not model_path_raw:
+                raise ValueError("Define dónde guardar el modelo .pth.")
+
+            epochs = int(self.nn_epochs_var.get().strip())
+            batch_size = int(self.nn_batch_var.get().strip())
+            learning_rate = float(self.nn_lr_var.get().strip())
+            image_size = int(self.nn_image_size_var.get().strip())
+            val_fraction = float(self.nn_val_fraction_var.get().strip())
+            seed = int(self.nn_seed_var.get().strip())
+
+            self.nn_training = True
+            self.after(0, lambda: self.nn_train_button.configure(state="disabled"))
+            self.after(0, lambda: self.nn_progress.configure(value=0))
+            self.after(0, lambda: self.nn_status_var.set("Preparando dataset y modelo..."))
+            self.after(0, lambda: self.append_nn_log(
+                f"\n=== Nuevo entrenamiento ===\nDataset: {output_dir}\nModelo: {model_path_raw}"
+            ))
+
+            def progress(data: dict) -> None:
+                epoch = int(data["epoch"])
+                total = int(data["epochs"])
+                percent = 100.0 * epoch / max(total, 1)
+
+                line = (
+                    f"Época {epoch}/{total} | "
+                    f"train loss={data['train_loss']:.4f} | "
+                    f"train acc={data['train_accuracy']:.2f}% | "
+                    f"val loss={data['val_loss']:.4f} | "
+                    f"val acc={data['val_accuracy']:.2f}%"
+                )
+
+                self.after(0, lambda p=percent: self.nn_progress.configure(value=p))
+                self.after(0, lambda l=line: self.append_nn_log(l))
+                self.after(0, lambda e=epoch, t=total, d=data: self.nn_status_var.set(
+                    f"Entrenando {e}/{t} | dispositivo={d['device']} | "
+                    f"mejor val={d['best_val_accuracy']:.2f}%"
+                ))
+
+            summary = train_classifier(
+                dataset_output_dir=output_dir,
+                model_path=Path(model_path_raw),
+                epochs=epochs,
+                batch_size=batch_size,
+                learning_rate=learning_rate,
+                image_size=image_size,
+                val_fraction=val_fraction,
+                seed=seed,
+                progress_callback=progress,
+            )
+
+            def finish() -> None:
+                self.nn_progress.configure(value=100)
+                self.nn_status_var.set(
+                    f"Entrenamiento terminado. Mejor validación: "
+                    f"{summary['best_val_accuracy']:.2f}% (época {summary['best_epoch']})."
+                )
+
+                self.append_nn_log(
+                    f"Clases: {', '.join(summary['class_names'])}\n"
+                    f"Imágenes: {summary['total_images']} "
+                    f"(train={summary['train_images']}, val={summary['val_images']})\n"
+                    f"Dispositivo: {summary['device']}\n"
+                    f"Mejor modelo: {summary['model_path']}"
+                )
+
+                for warning in summary.get("warnings", []):
+                    self.append_nn_log("AVISO: " + warning)
+
+                self.refresh_nn_model_info()
+                messagebox.showinfo(
+                    "Entrenamiento completado",
+                    (
+                        f"Modelo guardado en:\n{summary['model_path']}\n\n"
+                        f"Clases: {summary['num_classes']}\n"
+                        f"Imágenes: {summary['total_images']}\n"
+                        f"Mejor validación: {summary['best_val_accuracy']:.2f}%"
+                    )
+                )
+
+            self.after(0, finish)
+
+        except Exception as e:
+            self.after(0, lambda err=str(e): self.nn_status_var.set("Error de entrenamiento."))
+            self.after(0, lambda err=str(e): self.append_nn_log("ERROR: " + err))
+            self.after(0, lambda err=str(e): messagebox.showerror("Error de entrenamiento", err))
+        finally:
+            self.nn_training = False
+            self.after(0, lambda: self.nn_train_button.configure(state="normal"))
+
+    def refresh_nn_model_info(self) -> None:
+        try:
+            path_raw = self.nn_model_path_var.get().strip()
+            if not path_raw:
+                self.nn_model_info_var.set("Sin ruta de modelo.")
+                return
+
+            path = Path(path_raw)
+            if not path.exists():
+                self.nn_model_info_var.set("El modelo aún no existe en la ruta indicada.")
+                return
+
+            info = load_checkpoint_metadata(path)
+            classes = ", ".join(info.get("class_names", []))
+            best = info.get("best_val_accuracy")
+            best_text = "N/D" if best is None else f"{float(best):.2f}%"
+
+            self.nn_model_info_var.set(
+                f"Modelo: {info.get('model_type')} | "
+                f"tamaño={info.get('image_size')} | "
+                f"mejor val={best_text}\n"
+                f"Clases: {classes}"
+            )
+        except Exception as e:
+            self.nn_model_info_var.set(f"No se pudo leer el modelo: {e}")
+
+    def select_nn_test_image(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Selecciona una imagen para clasificar",
+            filetypes=[
+                ("Imágenes", "*.jpg *.jpeg *.png *.bmp *.webp"),
+                ("Todos los archivos", "*.*")
+            ]
+        )
+        if not path:
+            return
+
+        self.nn_test_image_var.set(path)
+        self.show_nn_test_preview(Path(path))
+        self.nn_prediction_var.set("Imagen cargada. Presiona 'Clasificar imagen'.")
+
+    def show_nn_test_preview(self, image_path: Path) -> None:
+        try:
+            with Image.open(image_path) as img:
+                preview = img.convert("RGB").copy()
+                preview.thumbnail((620, 330))
+
+            self.nn_test_preview_photo = ImageTk.PhotoImage(preview)
+            self.nn_test_preview_label.configure(image=self.nn_test_preview_photo, text="")
+        except Exception as e:
+            self.nn_test_preview_photo = None
+            self.nn_test_preview_label.configure(
+                image="",
+                text=f"No se pudo mostrar la imagen:\n{e}"
+            )
+
+    def start_classifier_prediction(self) -> None:
+        threading.Thread(target=self.classifier_prediction_action, daemon=True).start()
+
+    def classifier_prediction_action(self) -> None:
+        try:
+            image_raw = self.nn_test_image_var.get().strip()
+            model_raw = self.nn_model_path_var.get().strip()
+
+            if not image_raw:
+                raise ValueError("Selecciona primero una imagen de prueba.")
+            if not model_raw:
+                raise ValueError("Selecciona o entrena primero un modelo .pth.")
+
+            self.after(0, lambda: self.nn_predict_button.configure(state="disabled"))
+            self.after(0, lambda: self.nn_prediction_var.set("Clasificando..."))
+
+            result = predict_image(
+                image_path=Path(image_raw),
+                model_path=Path(model_raw),
+            )
+
+            def finish_prediction() -> None:
+                self.nn_prediction_var.set(
+                    f"Predicción: {result['predicted_class']}\n"
+                    f"Confianza: {result['confidence_percentage']:.2f}% "
+                    f"| dispositivo: {result['device']}"
+                )
+
+                for item in self.nn_prob_tree.get_children():
+                    self.nn_prob_tree.delete(item)
+
+                for row in result["probabilities"]:
+                    self.nn_prob_tree.insert(
+                        "",
+                        "end",
+                        values=(row["class_name"], f"{row['percentage']:.2f}%")
+                    )
+
+            self.after(0, finish_prediction)
+
+        except Exception as e:
+            self.after(0, lambda err=str(e): self.nn_prediction_var.set("No se pudo clasificar."))
+            self.after(0, lambda err=str(e): messagebox.showerror("Error de predicción", err))
+        finally:
+            self.after(0, lambda: self.nn_predict_button.configure(state="normal"))
+
     def open_notes_window(self) -> None:
         NotesWindow(self)
 
@@ -328,6 +822,7 @@ class AugmentApp(tk.Tk):
 
         if last_output and Path(last_output).exists():
             self.refresh_augmented_list()
+            self.sync_nn_model_path()
 
         if last_input or last_output:
             self.session_info_var.set(
@@ -577,6 +1072,7 @@ class AugmentApp(tk.Tk):
         if folder:
             self.output_dir_var.set(folder)
             self.refresh_augmented_list()
+            self.sync_nn_model_path()
             self.save_session_json()
             self.session_info_var.set(
                 f"Sesión guardada. Último output: {folder}"
