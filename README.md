@@ -1,8 +1,59 @@
+<div align="center">
+
+<img src="assets/kounta_logo.png" alt="Logotipo de Kount-A y Visbra" width="360"/>
+
 # Kount-A / Visbra
 
-## Evolución del software para inspección y conteo por visión artificial
+**Software de visión artificial para inspección, identificación y conteo de componentes**
 
-Este repositorio documenta el desarrollo incremental de **Visbra**, software que integra adquisición, etiquetado, procesamiento visual, detección mediante YOLO, referencias ArUco, interfaz HMI y comunicación con el sistema embebido del prototipo **Kount-A**.
+Python · OpenCV · YOLO · ArUco · ESP32
+
+</div>
+
+## Vista general del sistema
+
+Los siguientes diagramas presentan, de manera visual, el funcionamiento del sistema y la organización de sus módulos. **Haz clic en cada diagrama para abrirlo en tamaño completo.**
+
+<table>
+  <tr>
+    <th width="50%">Diagrama de flujo integral</th>
+    <th width="50%">Diagrama UML de clases</th>
+  </tr>
+  <tr>
+    <td valign="top" align="center">
+      <a href="docs/diagramas/01_flujo_integral_KountA_v16.svg">
+        <img src="docs/diagramas/01_flujo_integral_KountA_v16.png" width="100%" alt="Diagrama de flujo integral de Kount-A y Visbra"/>
+      </a>
+    </td>
+    <td valign="top" align="center">
+      <a href="docs/diagramas/02_uml_clases_Visbra_v16.svg">
+        <img src="docs/diagramas/02_uml_clases_Visbra_v16.png" width="100%" alt="Diagrama UML de clases principales de Visbra"/>
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td>Inicio de sesión, perfiles, secuencias, adquisición, procesamiento, detección YOLO, mediciones ArUco y resultados.</td>
+    <td>Clases de interfaz, módulos de cámara, almacenamiento, detección, perfiles, secuencias y comunicación ESP32.</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="docs/diagramas/01_flujo_integral_KountA_v16.pdf">Ver PDF</a> · <a href="docs/diagramas/01_flujo_integral_KountA_v16.svg">Ampliar SVG</a></td>
+    <td align="center"><a href="docs/diagramas/02_uml_clases_Visbra_v16.pdf">Ver PDF</a> · <a href="docs/diagramas/02_uml_clases_Visbra_v16.svg">Ampliar SVG</a></td>
+  </tr>
+</table>
+
+## Diagramas en detalle
+
+### Flujo de funcionamiento
+
+[![Diagrama de flujo integral de Kount-A / Visbra](docs/diagramas/01_flujo_integral_KountA_v16.png)](docs/diagramas/01_flujo_integral_KountA_v16.svg)
+
+### Arquitectura UML
+
+[![Diagrama UML de clases principales de Visbra](docs/diagramas/02_uml_clases_Visbra_v16.png)](docs/diagramas/02_uml_clases_Visbra_v16.svg)
+
+---
+
+Visbra integra adquisición y procesamiento de imágenes, detección y conteo mediante YOLO, referencias espaciales y dimensionales con ArUco, interfaz gráfica y comunicación con el sistema embebido del prototipo **Kount-A**.
 
 ### Tres grandes etapas
 
