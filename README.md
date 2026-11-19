@@ -30,7 +30,6 @@ El proyecto pertenece a su equipo desarrollador. La publicación pública no con
 - [Tres avances de desarrollo](docs/historial/AVANCES.md)
 - [Registro de cambios](docs/historial/CHANGELOG.md)
 - [Análisis inicial de las versiones](docs/historial/ANALISIS_INICIAL.md)
-- [Texto para el capítulo 3 en LaTeX](docs/capitulo3/TEXTO_TESINA_CAPITULO_3.tex)
 - [Guía para importar el historial Git y sus etiquetas](docs/historial/PUBLICACION.md)
 
-**Pendiente:** transferir el historial Git completo y los archivos de diagramas vectoriales que están en el paquete preparado.
+**Estado actual:** el código histórico, las 19 etiquetas y los diagramas se encuentran publicados en la rama predeterminada [`historial-visbra`](../../tree/historial-visbra). Esta rama `main` se conserva únicamente como respaldo de la documentación inicial.
