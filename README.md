@@ -1,14 +1,14 @@
-# Visbra / Kount-A — v3.16.2
+# Visbra / Kount-A — v3.16.3
 
 **Reconstrucción documental de la entrega histórica de Visbra.**
 
-- **Etiqueta técnica:** `v3.16.2`
+- **Etiqueta técnica:** `v3.16.3`
 - **Etapa:** 3 de 3
 - **Versión original del proyecto:** 16
-- **Revisión documentada:** 2
-- **Cambio principal:** Pausa de 3 segundos entre instrucciones de trabajo.
-- **Procedencia:** `KountA_v16_pausa_3s_solo_sequence_ui.zip`
-- **Nota:** Parche específico del ejecutor de secuencias.
+- **Revisión documentada:** 3
+- **Cambio principal:** Saturación visual por píxeles ocupados en la zona ArUco.
+- **Procedencia:** `KountA_v16_saturacion_aruco_solo_archivo.zip`
+- **Nota:** Parche específico de aruco_core.py.
 
 La numeración de GitHub es una convención documental personalizada, **no implica compatibilidad con versionado semántico estándar**. Los commits y las etiquetas fueron reconstruidos a partir de archivos proporcionados y **no representan fechas originales de desarrollo**.
 

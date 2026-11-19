@@ -13,6 +13,30 @@ from PIL import Image
 
 EXPECTED_IDS = (0, 1, 2, 3)
 
+
+def _stamp_saturation(preview_bgr: np.ndarray, percentage: float | None) -> None:
+    """Show the ROI occupancy in a readable corner, without changing the source image."""
+    text = ('Saturacion: N/D' if percentage is None else
+            f'Saturacion: {percentage:.2f}%')
+    height, width = preview_bgr.shape[:2]
+    scale = max(0.36, min(0.8, width / 1150.0))
+    thickness = 2 if scale >= .55 else 1
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    (tw, th), base = cv2.getTextSize(text, font, scale, thickness)
+    # Fit the badge when the camera's preview is unusually small.
+    if tw + 16 > width:
+        scale *= max(.2, (width - 16) / max(tw, 1))
+        (tw, th), base = cv2.getTextSize(text, font, scale, thickness)
+    right = width - 6
+    top = 6
+    left = max(0, right - tw - 14)
+    bottom = min(height - 1, top + th + base + 13)
+    cv2.rectangle(preview_bgr, (left, top), (right, bottom), (25, 34, 44), -1)
+    cv2.rectangle(preview_bgr, (left, top), (right, bottom), (94, 163, 224), 1)
+    cv2.putText(preview_bgr, text, (left + 7, min(height-2, top + th + 6)),
+                font, scale, (255, 255, 255), thickness, cv2.LINE_AA)
+
+
 def analyze(image: Image.Image, settings: dict) -> dict:
     rgb = np.asarray(image.convert('RGB'))
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
@@ -29,12 +53,16 @@ def analyze(image: Image.Image, settings: dict) -> dict:
     diagnostic = {'markers': sorted(markers), 'detected': len(markers), 'valid': False,
                   'reason': 'Se requieren los cuatro ArUco (0, 1, 2, 3).',
                   'rmse_mm': None, 'polygon': None, 'homography': None,
-                  'contours': [], 'contour_count': None}
+                  'contours': [], 'contour_count': None,
+                  'saturation_pct': None, 'occupied_pixels': None, 'area_pixels': None}
     for idx, pts in markers.items():
         cv2.polylines(bgr, [pts.astype(np.int32)], True, (30, 205, 80), 2)
         at = np.round(pts.mean(axis=0)).astype(int)
         cv2.putText(bgr, f'ID {idx}', tuple(at), cv2.FONT_HERSHEY_SIMPLEX, .7, (30, 205, 80), 2)
-    diagnostic['preview'] = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+    # A missing/invalid ArUco area has no meaningful saturation value.
+    initial_preview = bgr.copy()
+    _stamp_saturation(initial_preview, None)
+    diagnostic['preview'] = Image.fromarray(cv2.cvtColor(initial_preview, cv2.COLOR_BGR2RGB))
     if len(markers) != 4:
         return diagnostic
     try:
@@ -67,7 +95,9 @@ def analyze(image: Image.Image, settings: dict) -> dict:
         diagnostic.update(valid=True, reason='Calibración válida.', homography=homography,
                           polygon=pixel_centers)
         cv2.polylines(bgr, [poly], True, (235, 205, 40), 3)
-        gray = cv2.GaussianBlur(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY), (5, 5), 0)
+        # Segment the ORIGINAL image, not the preview decorated with ArUco outlines.
+        # Otherwise the colored marker labels / ROI border can create fake contours.
+        gray = cv2.GaussianBlur(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY), (5, 5), 0)
         _, mask = cv2.threshold(gray, int(settings.get('threshold', 120)), 255, cv2.THRESH_BINARY_INV)
         for pts in markers.values():
             x,y,w,h = cv2.boundingRect(pts.astype(np.int32))
@@ -80,6 +110,7 @@ def analyze(image: Image.Image, settings: dict) -> dict:
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         measured = []
+        accepted_contours = []  # Only silhouettes that pass the measurement criteria count.
         for contour in contours:
             area = cv2.contourArea(contour)
             if not float(settings.get('min_area_px', 500)) <= area <= float(settings.get('max_area_px', 150000)):
@@ -91,12 +122,29 @@ def analyze(image: Image.Image, settings: dict) -> dict:
             b = (np.linalg.norm(pts[2]-pts[1])+np.linalg.norm(pts[0]-pts[3])) / 2
             if max(a,b) > 200 or min(a,b) > 150:
                 continue
+            accepted_contours.append(contour)
             measured.append({'bbox_xyxy': list(map(int, (cv2.boundingRect(contour)[0], cv2.boundingRect(contour)[1],
                          cv2.boundingRect(contour)[0]+cv2.boundingRect(contour)[2], cv2.boundingRect(contour)[1]+cv2.boundingRect(contour)[3]))),
                              'box': corners, 'center': rect[0], 'length_mm': round(float(max(a,b)),2),
                              'width_mm': round(float(min(a,b)),2), 'area_px': float(area)})
-        diagnostic['contours'] = measured
-        diagnostic['contour_count'] = len(measured)
+        # Count occupied pixels, not entire bounding rectangles. Restrict the
+        # numerator to measurable objects and the denominator to the ArUco ROI.
+        # Intersecting with the segmented mask leaves holes (e.g. washers) empty.
+        accepted_region = np.zeros_like(mask)
+        if accepted_contours:
+            cv2.drawContours(accepted_region, accepted_contours, -1, 255, thickness=-1)
+        occupied = cv2.bitwise_and(mask, accepted_region)
+        occupied_pixels = int(cv2.countNonZero(occupied))
+        area_pixels = int(cv2.countNonZero(region))
+        if area_pixels <= 0:
+            diagnostic['valid'] = False
+            diagnostic['reason'] = 'El area util de ArUco no contiene pixeles.'
+            return diagnostic
+        saturation = min(100.0, 100.0 * occupied_pixels / area_pixels)
+        diagnostic.update(contours=measured, contour_count=len(measured),
+                          occupied_pixels=occupied_pixels, area_pixels=area_pixels,
+                          saturation_pct=saturation)
+        _stamp_saturation(bgr, saturation)
         diagnostic['preview'] = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
         return diagnostic
     except (cv2.error, ValueError, TypeError, OverflowError) as exc:
@@ -148,6 +196,9 @@ def combine(image: Image.Image, yolo: dict, calibration: dict, compare: bool = F
     counts = dict(Counter(d['class_name'] for d in filtered))
     return {'detections': filtered, 'counts': counts, 'total':len(filtered),
             'calibration': {'detected': calibration['detected'], 'valid':calibration['valid'],
-                            'reason':calibration['reason'], 'rmse_mm':calibration['rmse_mm']},
+                            'reason':calibration['reason'], 'rmse_mm':calibration['rmse_mm'],
+                            'saturation_pct': calibration.get('saturation_pct'),
+                            'occupied_pixels': calibration.get('occupied_pixels'),
+                            'area_pixels': calibration.get('area_pixels')},
             'contour_count': calibration['contour_count'] if compare else None,
             'preview': Image.fromarray(canvas)}
