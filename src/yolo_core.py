@@ -304,3 +304,56 @@ def predict_image(image: Image.Image, model_path: str, conf: float = .5,
     for detection in detections:
         counts[detection['class_name']] = counts.get(detection['class_name'], 0) + 1
     return {'detections': detections, 'counts': counts, 'total': len(detections)}
+
+
+def prelabel_images_batch(images: list[Path], input_dir: Path, output_dir: Path,
+                          model_path: str, confidence: float, allowed_classes: set[str],
+                          keep_existing: bool = True, progress=None) -> dict:
+    """Run inference with ONE loaded YOLO model and persist proposed BBox for a profile.
+
+    Existing annotations are skipped by default; if replacement is enabled, a
+    pre-existing annotation is only replaced after valid detections are found.
+    All labels remain tentative and must be reviewed in the manual editor.
+    """
+    from .project_core import has_saved_annotation, save_annotations
+
+    if not 0 < confidence < 1:
+        raise ValueError('Confianza inválida.')
+    if not Path(model_path).is_file():
+        raise FileNotFoundError(f'No se encuentra el modelo: {model_path}')
+    if not allowed_classes:
+        raise ValueError('El perfil no tiene clases configuradas.')
+    YOLO = _require_yolo()
+    model = YOLO(str(model_path))
+    model_names = list(model.names.values()) if isinstance(model.names, dict) else list(model.names)
+    unknown = sorted({str(name) for name in model_names if normalized_class(str(name)) not in allowed_classes})
+    if unknown:
+        raise ValueError('Las clases del modelo no corresponden al perfil seleccionado: '+', '.join(unknown))
+
+    counts = {'updated': 0, 'skipped': 0, 'empty': 0, 'total': len(images)}
+    for index, path in enumerate(images, 1):
+        path = Path(path)
+        if keep_existing and (has_saved_annotation(input_dir, path)
+                              or read_annotations(input_dir, path, output_dir)):
+            counts['skipped'] += 1
+        else:
+            with Image.open(path) as source_image:
+                image = source_image.convert('RGB')
+            result = model.predict(source=image, conf=confidence, iou=.45, max_det=300,
+                                   verbose=False, device='0' if torch.cuda.is_available() else 'cpu')[0]
+            candidates = []
+            if result.boxes is not None:
+                for box in result.boxes:
+                    name = normalized_class(str(result.names[int(box.cls.item())]))
+                    if name not in allowed_classes:
+                        continue
+                    candidates.append({'class_name': name,
+                                       'bbox_xyxy': [float(x) for x in box.xyxy[0].cpu().tolist()]})
+            if candidates:
+                save_annotations(input_dir, path, candidates)
+                counts['updated'] += 1
+            else:
+                counts['empty'] += 1
+        if progress is not None:
+            progress(index, len(images), counts['updated'])
+    return counts

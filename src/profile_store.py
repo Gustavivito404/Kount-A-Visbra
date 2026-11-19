@@ -20,6 +20,19 @@ class ProfileManager:
         if not self.list_profiles():
             self.create('Tornillería', DEFAULT_CLASSES, aruco_mode='optional')
 
+    def set_root(self, profiles_directory: Path) -> None:
+        """Switch to an existing profiles folder without copying or deleting any data.
+
+        The built-in profiles/ directory is ALWAYS created on fresh installations by
+        __init__. An external empty folder is allowed and is not populated implicitly.
+        """
+        directory = Path(profiles_directory).expanduser().resolve()
+        if not directory.is_dir():
+            raise ValueError('Selecciona una carpeta de perfiles existente.')
+        if directory.is_symlink():
+            raise ValueError('No se permiten enlaces simbólicos para la carpeta de perfiles.')
+        self.root = directory
+
     def list_profiles(self) -> list[dict]:
         records = []
         for folder in sorted(self.root.iterdir()):

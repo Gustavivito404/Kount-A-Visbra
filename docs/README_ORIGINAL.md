@@ -1,4 +1,15 @@
-# Kount-A — v15 (perfiles, roles, temas, YOLO y ArUco)
+# Kount-A — v15 (ajustes de interfaz, dueño, perfiles externos y BBox por lote)
+
+## Aplicar estos ajustes a tu v15 actual (sin borrar datasets)
+
+Para conservar `profiles/` y `config/users.json` de tu instalación, utiliza **KountA_v15_solo_archivos_modificados.zip**. Extrae ese ZIP **dentro de la carpeta raíz de `KountA_YOLO_v15`**, de modo que reemplace solamente:
+
+- `src/gui_app.py`
+- `src/auth_store.py`
+- `src/profile_store.py`
+- `src/yolo_core.py`
+
+Conserva una copia de seguridad antes de sustituirlos. El ZIP completo es solamente una copia independiente para instalaciones nuevas; si ya hay datos de entrenamiento o cuentas, **no sustituyas la carpeta entera**. El resto de la v15 permanece igual. En CMD inicia con `python -m src.gui_app` desde la raíz y el Python de Windows usado para las dependencias.
 
 ## Cómo instalar y abrir (Windows)
 
@@ -24,13 +35,17 @@ ArUco necesita `cv2.aruco` y se incluye `opencv-contrib-python`. Si la instalaci
 
 ## Inicio de sesión y apariencia
 
-- En la **primera ejecución**, el programa te pedirá crear una cuenta de **ingeniero** con usuario y contraseña (mínimo 8 caracteres).
-- El ingeniero puede crear cuentas de `operator` o `engineer` desde la pestaña **Perfiles**.
+- En una **instalación nueva**, la primera cuenta debe ser de **dueño (`owner`)** con usuario y contraseña (mínimo 8 caracteres).
+- El **dueño** puede crear cuentas de dueño, ingeniero y operador desde **7 · Usuarios**, renombrarlas, cambiar roles, activar/desactivar y restablecer contraseñas. No se puede desactivar o degradar al último dueño activo.
+- Si actualizas una v15 que ya tenía usuarios pero no dueño, puedes **convertir tu cuenta original de ingeniero** en dueño al iniciar sesión con tus credenciales correctas. Nunca borres `config/users.json` para actualizar.
+- El ingeniero **no puede** administrar usuarios.
 - No se incluyen cuentas de demostración ni contraseñas predeterminadas. Las contraseñas se almacenan con PBKDF2-HMAC-SHA256 y sal individual en `config/users.json`. Mantén esa carpeta privada y protegida en Windows.
 - El selector `☀ Claro / ☾ Oscuro` cambia fondo, textos, botones, pestañas y vistas existentes. La preferencia se guarda en `config/appearance.json`.
 - `assets/kounta_logo.png` es un **logotipo tipográfico provisional**, no el logotipo oficial: puedes reemplazarlo por tu PNG definitivo conservando el nombre y la transparencia. Se presenta al iniciar sesión.
 
-## Ingeniero / operador
+## Dueño / ingeniero / operador
+
+**Dueño** dispone de todas las pestañas de ingeniería más **7 · Usuarios**, y del botón **Vista operador / Vista ingeniero** para alternar entre ambas interfaces.
 
 **Ingeniero** dispone de las seis pestañas: Perfiles; BBox y etiquetado; Augmentación; Entrenamiento YOLO; Prueba y conteo; Calibración ArUco.
 
@@ -56,6 +71,10 @@ profiles/<perfil>/
 ```
 
 - Crear perfiles, agregar clases e importar fotos: **solo desde Perfiles**.
+- En toda instalación se sigue creando `profiles/` en la carpeta del programa y su perfil inicial de Tornillería. El botón **Explorar perfiles…**, junto al selector de perfil superior, permite usar otra carpeta `profiles` existente en cualquier disco, incluso vacía. **No mueve, copia, borra ni crea perfiles adicionales en la carpeta elegida**. La ubicación se recuerda en `config/profiles_location.json`.
+- Se eliminó la visualización de las rutas largas de `input` y `output` del encabezado para aprovechar más espacio. Cada perfil continúa usando sus carpetas internas. **Recargar imágenes** queda arriba, junto a la opción de tema.
+- La pestaña **2 · BBox y etiquetado** permite escoger **Edición manual**, **Detección auxiliar: escala de grises** o **Preetiquetado con modelo YOLO** desde un único selector. Solamente se muestran las opciones del modo activo; el listado de objetos permanece visible.
+- Escala de grises conserva su detección por foto y por lote para fotos sin etiquetas. YOLO ahora permite preetiquetar **una foto o todas las fotos del perfil** con un único modelo cargado. De forma predeterminada, omite las imágenes ya etiquetadas; puedes desactivar esa opción tras confirmar que reemplazará anotaciones de imágenes en las que haya nuevas detecciones. **Revisa las BBox antes de entrenar**.
 - Los nombres de clase se normalizan para YOLO (`Luneta fija` → `luneta_fija`). Se usan en el combo BBox, en las anotaciones, al aumentar imágenes y en el YAML de entrenamiento.
 - `mezclas` es carpeta auxiliar, no clase. Permite anotar múltiples clases en una misma foto.
 - Una clase nueva **invalida la autorización anterior**; hay que evaluar/autorizar una versión compatible. La aplicación impide eliminar clases cuando hay anotaciones o modelos que podrían depender de ellas.
@@ -94,7 +113,7 @@ BBox manual multiobjeto; ayuda por umbral gris; pre-etiquetado con YOLO; transfo
 
 ## Limitaciones y pruebas
 
-- El sistema inicia y se ha comprobado la navegación de ambas cuentas, los perfiles, los JSON BBox y el núcleo geométrico ArUco con imágenes sintéticas en Linux. **No se ha validado todavía la cámara física ni el entrenamiento/inferencia real de Ultralytics con tu dataset y hardware Windows.**
+- Se probó localmente el inicio de sesión con roles, las vistas dueño/ingeniero/operador, el selector de BBox y los perfiles externos mediante Tkinter en Linux; el etiquetado YOLO por lote se probó con un modelo simulado. También se ejecutó `python -m src.smoke_test` para etiquetado, aumentación y exportación. **No se ha validado todavía la cámara física ni el entrenamiento/inferencia real de Ultralytics con tu dataset y hardware Windows.**
 - El modo comparativo **no constituye una verificación de exactitud por sí mismo**; hace falta un conteo real etiquetado como referencia.
 - No hay aún historial automático de inspecciones, exportación de producción ni control de actuadores; no se implementaron al no estar aprobados esos flujos.
 - Evita mover manualmente los archivos aprobados; la autorización guarda la ruta del modelo dentro del perfil.

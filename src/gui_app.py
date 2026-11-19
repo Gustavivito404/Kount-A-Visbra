@@ -26,11 +26,24 @@ class KountApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('Kount-A v15 | Plataforma de inspección')
-        self.geometry('1500x900')
-        self.minsize(1100, 730)
+        # Fit the initial window inside smaller laptop screens while retaining the v15 layout.
+        available_w = self.winfo_screenwidth()
+        available_h = self.winfo_screenheight()
+        self.geometry(f'{min(1500, max(930, available_w-60))}x{min(900, max(600, available_h-85))}')
+        self.minsize(930, 600)
         self.project_root = Path(__file__).resolve().parent.parent
         self.profiles = ProfileManager(self.project_root)
         self.users = UserStore(self.project_root)
+        self.profiles_location_file = self.project_root / 'config' / 'profiles_location.json'
+        # The built-in profiles/ remains part of every new installation.
+        try:
+            saved_location = json.loads(self.profiles_location_file.read_text(encoding='utf-8')).get('directory')
+            if saved_location and Path(saved_location).is_dir():
+                self.profiles.set_root(Path(saved_location))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            pass
+        self.profiles_root_var = tk.StringVar(value=str(self.profiles.root))
+        self.view_mode = 'engineer'  # owner may switch to operator view without changing credentials
         self.theme_file = self.project_root / 'config' / 'appearance.json'
         self.theme_name = 'dark'
         try:
@@ -69,6 +82,13 @@ class KountApp(tk.Tk):
         self._build_login()
         self.after(100, self._poll_queue)
         self.protocol('WM_DELETE_WINDOW', self._on_close)
+
+    def _engineering_view(self):
+        return self.role in ('owner', 'engineer') and self.view_mode == 'engineer'
+
+    def _visible_profiles(self):
+        return (self.profiles.list_profiles() if self._engineering_view()
+                else self.profiles.approved_profiles())
 
     def _palette(self):
         if self.theme_name == 'light':
@@ -168,10 +188,13 @@ class KountApp(tk.Tk):
             if not hidden:
                 ent.focus_set()
         if not self.users.has_users:
-            ttk.Label(wrapper,text='Primera ejecución: crea la cuenta de ingeniero.',
+            ttk.Label(wrapper,text='Primera ejecución: crea la cuenta del dueño.',
                       foreground=self._palette()['blue']).pack(pady=12)
-            label='Crear cuenta de ingeniero'
+            label='Crear cuenta del dueño'
         else:
+            if not self.users.has_owner:
+                ttk.Label(wrapper,text='Actualización: inicia sesión con un ingeniero para activar al dueño.',
+                          foreground=self._palette()['blue'],wraplength=360).pack(pady=12)
             label='Iniciar sesión'
         ttk.Button(wrapper,text=label,style='Primary.TButton',command=self._submit_login).pack(fill='x',pady=(20,10))
         self.bind('<Return>',lambda _e:self._submit_login())
@@ -182,27 +205,37 @@ class KountApp(tk.Tk):
         username,password=self.login_user.get(),self.login_pass.get()
         try:
             if not self.users.has_users:
-                self.users.add_user(username,password,'engineer')
-                role='engineer'
+                self.users.add_user(username,password,'owner')
+                role='owner'
             else:
                 role=self.users.login(username,password)
                 if not role:
                     messagebox.showerror('Acceso','Usuario o contraseña incorrectos.')
                     return
+                if not self.users.has_owner and role == 'engineer':
+                    if messagebox.askyesno('Actualizar propietario',
+                            'Esta instalación anterior no tiene dueño. ¿Quieres convertir '
+                            'esta cuenta de ingeniero verificada en dueño?'):
+                        self.users.promote_legacy_engineer(username, password)
+                        role='owner'
+                if not self.users.has_owner:
+                    messagebox.showerror('Acceso','Primero es necesario establecer una cuenta del dueño.')
+                    return
         except Exception as exc:
             messagebox.showerror('Usuario',str(exc)); return
         self.username=username.strip().lower()
         self.role=role
+        self.view_mode='engineer' if role in ('owner','engineer') else 'operator'
         self.unbind('<Return>')
         self.login_screen.destroy()
         self._open_workspace()
 
     def _open_workspace(self):
-        all_profiles=self.profiles.list_profiles() if self.role=='engineer' else self.profiles.approved_profiles()
+        all_profiles=self._visible_profiles()
         if all_profiles:
             self._select_profile(all_profiles[0]['id'],rebuild=False)
         self._build_ui()
-        if self.role=='engineer':
+        if self._engineering_view():
             self._load_session()
         else:
             self._refresh_operator_profiles()
@@ -214,6 +247,8 @@ class KountApp(tk.Tk):
         self.gray_threshold = tk.StringVar(value='225')
         self.gray_min_area = tk.StringVar(value='150')
         self.auto_keep = tk.BooleanVar(value=False)
+        self.prelabel_keep_existing = tk.BooleanVar(value=True)
+        self.bbox_editing_mode = tk.StringVar(value='Edición manual')
         self.prelabel_model = tk.StringVar()
         self.prelabel_conf = tk.StringVar(value='0.40')
         self.aug_copies = tk.StringVar(value='10')
@@ -253,42 +288,45 @@ class KountApp(tk.Tk):
         self.aruco_mode_var = tk.StringVar(value='optional')
 
     def _build_ui(self):
-        self.workspace = ttk.Frame(self,padding=10)
+        self.workspace = ttk.Frame(self,padding=8)
         self.workspace.pack(fill='both',expand=True)
         bar=ttk.Frame(self.workspace)
-        bar.pack(fill='x',pady=(0,8))
-        ttk.Label(bar,text='KOUNT-A  |  v15',font=('Segoe UI',17,'bold'),
-                  foreground=self._palette()['blue']).pack(side='left',padx=(0,15))
-        ttk.Label(bar,text=f'{self.username}  ·  {"Ingeniero" if self.role=="engineer" else "Operador"}').pack(side='left',padx=8)
-        ttk.Button(bar,text='Cerrar sesión',command=self._logout).pack(side='right',padx=4)
-        self.theme_button=ttk.Button(bar,text='☀ Claro / ☾ Oscuro',command=self._toggle_theme)
-        self.theme_button.pack(side='right',padx=4)
-        ttk.Label(bar,text='Perfil:').pack(side='left',padx=(15,4))
-        self.profile_selector=ttk.Combobox(bar,textvariable=self.active_profile_var,state='readonly',width=28)
-        self.profile_selector.pack(side='left')
+        bar.pack(fill='x',pady=(0,6))
+        ttk.Label(bar,text='KOUNT-A  |  v15',font=('Segoe UI',16,'bold'),
+                  foreground=self._palette()['blue']).pack(side='left',padx=(0,10))
+        role_label={'owner':'Dueño','engineer':'Ingeniero','operator':'Operador'}[self.role]
+        ttk.Label(bar,text=f'{self.username} · {role_label}').pack(side='left',padx=(0,8))
+        ttk.Label(bar,text='Perfil:').pack(side='left',padx=(4,3))
+        self.profile_selector=ttk.Combobox(bar,textvariable=self.active_profile_var,state='readonly',width=22)
+        self.profile_selector.pack(side='left',padx=(0,4))
         self.profile_selector.bind('<<ComboboxSelected>>', self._on_profile_combo)
-        if self.role=='engineer':
-            top=ttk.Frame(self.workspace)
-            top.pack(fill='x',pady=(0,8))
-            ttk.Label(top,text='Input de fotografías').grid(row=0,column=0,sticky='w')
-            ttk.Entry(top,textvariable=self.input_var,state='readonly').grid(row=0,column=1,sticky='ew',padx=5)
-            ttk.Label(top,text='Output de resultados').grid(row=1,column=0,sticky='w',pady=4)
-            ttk.Entry(top,textvariable=self.output_var,state='readonly').grid(row=1,column=1,sticky='ew',padx=5)
-            ttk.Button(top,text='Recargar imágenes',command=self._refresh_images).grid(row=0,column=2,rowspan=2,padx=12)
-            top.columnconfigure(1,weight=1)
+        if self._engineering_view():
+            ttk.Button(bar,text='Explorar perfiles…',command=self._choose_profiles_root).pack(side='left',padx=3)
+        ttk.Button(bar,text='Cerrar sesión',command=self._logout).pack(side='right',padx=3)
+        self.theme_button=ttk.Button(bar,text='☀ Claro / ☾ Oscuro',command=self._toggle_theme)
+        self.theme_button.pack(side='right',padx=3)
+        if self._engineering_view():
+            ttk.Button(bar,text='Recargar imágenes',command=self._refresh_images).pack(side='right',padx=3)
+        if self.role=='owner':
+            ttk.Button(bar,text='Vista operador' if self._engineering_view() else 'Vista ingeniero',
+                       command=self._toggle_owner_view).pack(side='right',padx=3)
         self.nb=ttk.Notebook(self.workspace)
         self.nb.pack(fill='both',expand=True)
-        if self.role=='engineer':
+        if self._engineering_view():
             names=('1 · Perfiles', '2 · BBox y etiquetado','3 · Augmentación y revisión',
                    '4 · Entrenamiento YOLO','5 · Prueba y conteo','6 · Calibración ArUco')
+            if self.role=='owner':
+                names+=('7 · Usuarios',)
             tabs=[ttk.Frame(self.nb,padding=6) for _ in names]
-            for tab,name in zip(tabs,names):self.nb.add(tab,text=name)
+            for tab,name in zip(tabs,names): self.nb.add(tab,text=name)
             self._build_profiles_tab(tabs[0])
             self._build_bbox_tab(tabs[1])
             self._build_augment_tab(tabs[2])
             self._build_train_tab(tabs[3])
             self._build_test_tab(tabs[4])
             self._build_aruco_tab(tabs[5])
+            if self.role=='owner':
+                self._build_users_tab(tabs[6])
         else:
             tab=ttk.Frame(self.nb,padding=6)
             self.nb.add(tab,text='Producción · Captura y análisis')
@@ -296,12 +334,90 @@ class KountApp(tk.Tk):
         ttk.Label(self.workspace,textvariable=self.status_var,anchor='w').pack(fill='x',pady=(6,0))
         self._refresh_profile_selector()
 
+    def _toggle_owner_view(self):
+        if self.role != 'owner':
+            return
+        if self.busy:
+            messagebox.showwarning('Proceso activo','Espera a que terminen los procesos.');return
+        if self._engineering_view():
+            if not self._resolve_dirty():return
+            self._save_session()
+            self.view_mode='operator'
+        else:
+            self.view_mode='engineer'
+        self.workspace.destroy()
+        visible=self._visible_profiles()
+        if not self.active_profile or self.active_profile['id'] not in {p['id'] for p in visible}:
+            if visible:
+                self._select_profile(visible[0]['id'],rebuild=False)
+            else:
+                self._clear_profile()
+        self._build_ui()
+        if self._engineering_view():
+            self._load_session()
+        else:
+            self._refresh_operator_profiles()
+        self._recolor_tk(self)
+
+    def _choose_profiles_root(self):
+        if not self._engineering_view():return
+        if self.busy:
+            messagebox.showwarning('Proceso activo','Espera a que termine el proceso actual.');return
+        if not self._resolve_dirty():return
+        selected=filedialog.askdirectory(title='Seleccionar carpeta principal de perfiles',
+                                         initialdir=str(self.profiles.root),mustexist=True)
+        if not selected:return
+        new_root=Path(selected).resolve()
+        if new_root==self.profiles.root:return
+        try:
+            self.profiles.set_root(new_root)
+            self.profiles_location_file.parent.mkdir(parents=True,exist_ok=True)
+            self.profiles_location_file.write_text(
+                json.dumps({'directory':str(self.profiles.root)},ensure_ascii=False,indent=2),encoding='utf-8')
+            self.profiles_root_var.set(str(self.profiles.root))
+            profiles=self.profiles.list_profiles()
+            if profiles:
+                self._select_profile(profiles[0]['id'])
+            else:
+                self._clear_profile()
+                self._refresh_profiles_tab()
+                self._refresh_images()
+            self._refresh_profile_selector()
+            self.status_var.set('Carpeta de perfiles: '+str(self.profiles.root))
+        except (OSError,ValueError) as exc:
+            messagebox.showerror('Carpeta de perfiles',str(exc))
+
+    def _clear_profile(self):
+        self.active_profile=None
+        self.active_profile_var.set('Sin perfiles')
+        self.input_var.set('')
+        self.output_var.set('')
+        self.current_image=self.current_pil=None
+        self.current_objects=[]
+        self.image_files=[]
+        self.test_image=self.test_display_image=None
+        self.test_detections=[]
+        self.test_model.set('')
+        self.dirty=False
+        if self._engineering_view():
+            if hasattr(self,'orig_list') and self.orig_list.winfo_exists():
+                self.orig_list.delete(0,'end')
+                self._update_box_tree()
+                self._render_editor()
+            if hasattr(self,'classes_list') and self.classes_list.winfo_exists():
+                self.classes_list.delete(0,'end')
+                self.import_combo.configure(values=[])
+                self.model_combo.configure(values=[])
+                self.profile_info.set('No hay perfiles en la carpeta seleccionada.')
+        if hasattr(self,'test_summary') and self.test_summary is not None:
+            self.test_summary.set('No hay perfil seleccionado.')
+
     def _logout(self):
         if self.busy:
             messagebox.showwarning('Proceso activo','Espera a que terminen los procesos antes de cerrar sesión.')
             return
-        if self.role=='engineer' and not self._resolve_dirty():return
-        if self.role=='engineer':
+        if self._engineering_view() and not self._resolve_dirty():return
+        if self._engineering_view():
             try:self._save_session()
             except OSError:pass
         self.workspace.destroy()
@@ -310,14 +426,14 @@ class KountApp(tk.Tk):
         self._build_login()
 
     def _refresh_profile_selector(self):
-        profiles=self.profiles.list_profiles() if self.role=='engineer' else self.profiles.approved_profiles()
+        profiles=self._visible_profiles()
         self.profile_ids=[p['id'] for p in profiles]
         labels=[p['name'] for p in profiles]
         self.profile_selector.configure(values=labels)
         if self.active_profile and self.active_profile['id'] in self.profile_ids:
             self.profile_selector.current(self.profile_ids.index(self.active_profile['id']))
         else:
-            self.profile_selector.set('Sin perfiles autorizados' if self.role=='operator' else 'Elige un perfil')
+            self.profile_selector.set('Elige un perfil' if self._engineering_view() else 'Sin perfiles autorizados')
 
     def _on_profile_combo(self,_event=None):
         i=self.profile_selector.current()
@@ -327,13 +443,13 @@ class KountApp(tk.Tk):
         if self.busy:
             messagebox.showwarning('Proceso activo','Espera a que finalice el proceso antes de cambiar de perfil.')
             self._refresh_profile_selector();return
-        if self.role=='engineer' and not self._resolve_dirty():
+        if self._engineering_view() and not self._resolve_dirty():
             self._refresh_profile_selector();return
         self._select_profile(new)
 
     def _select_profile(self, profile_id, rebuild=True):
         cfg=self.profiles.load(profile_id)
-        if self.role=='operator' and cfg not in self.profiles.approved_profiles():
+        if not self._engineering_view() and cfg not in self.profiles.approved_profiles():
             raise ValueError('Perfil no autorizado.')
         self.active_profile=cfg
         set_active_classes(cfg['classes'])
@@ -354,7 +470,7 @@ class KountApp(tk.Tk):
         approved=cfg.get('approved_model')
         self.test_model.set(str(folder/approved) if approved else '')
         if rebuild:
-            if self.role=='engineer':
+            if self._engineering_view():
                 self.bbox_class.set(CLASS_NAMES[0])
                 self.bbox_combo.configure(values=CLASS_NAMES)
                 self.aug_current_original=self.aug_current_aug=None
@@ -411,9 +527,10 @@ class KountApp(tk.Tk):
         ttk.Button(row,text='Actualizar modelos',command=self._refresh_profiles_tab).pack(side='left',padx=3)
         ttk.Button(row,text='Autorizar modelo',command=self._approve_model,style='Primary.TButton').pack(side='left',padx=3)
         ttk.Button(row,text='Revocar autorización',command=self._revoke_model).pack(side='left',padx=3)
-        users=ttk.LabelFrame(right,text='Usuarios de operación',padding=10)
-        users.grid(row=3,column=0,sticky='ew',pady=5)
-        ttk.Button(users,text='Crear cuenta de operador / ingeniero',command=self._add_user).pack(anchor='w')
+        if self.role=='owner':
+            users=ttk.LabelFrame(right,text='Administración de usuarios',padding=10)
+            users.grid(row=3,column=0,sticky='ew',pady=5)
+            ttk.Label(users,text='Gestiona cuentas y contraseñas desde 7 · Usuarios.').pack(anchor='w')
         self._refresh_profiles_tab()
 
     def _refresh_profiles_tab(self):
@@ -549,16 +666,113 @@ class KountApp(tk.Tk):
         self.profiles.revoke(self.active_profile['id'])
         self._refresh_profiles_tab()
 
+    def _build_users_tab(self, tab):
+        if self.role!='owner':return
+        tab.columnconfigure(0,weight=1)
+        tab.rowconfigure(1,weight=1)
+        ttk.Label(tab,text='Administración de usuarios · Solo dueño',
+                  font=('Segoe UI',13,'bold')).grid(row=0,column=0,sticky='w',padx=9,pady=8)
+        self.users_tree=ttk.Treeview(tab,columns=('username','role','enabled'),show='headings',height=11)
+        for key,heading,width in [('username','Usuario',230),('role','Rol',170),('enabled','Acceso',130)]:
+            self.users_tree.heading(key,text=heading)
+            self.users_tree.column(key,width=width,anchor='w')
+        self.users_tree.grid(row=1,column=0,sticky='nsew',padx=9,pady=5)
+        row=ttk.Frame(tab)
+        row.grid(row=2,column=0,sticky='w',padx=9,pady=10)
+        ttk.Button(row,text='Crear usuario',style='Primary.TButton',command=self._add_user).pack(side='left',padx=(0,7))
+        ttk.Button(row,text='Renombrar usuario',command=self._rename_user).pack(side='left',padx=7)
+        ttk.Button(row,text='Cambiar rol',command=self._change_user_role).pack(side='left',padx=7)
+        ttk.Button(row,text='Cambiar contraseña',command=self._reset_user_password).pack(side='left',padx=7)
+        ttk.Button(row,text='Activar / desactivar',command=self._toggle_user_status).pack(side='left',padx=7)
+        self._refresh_users_table()
+
+    def _refresh_users_table(self):
+        if self.role!='owner' or not hasattr(self,'users_tree') or not self.users_tree.winfo_exists():return
+        for item in self.users_tree.get_children():self.users_tree.delete(item)
+        for record in self.users.user_details():
+            self.users_tree.insert('', 'end', iid=record['username'],
+                values=(record['username'], {'owner':'Dueño','engineer':'Ingeniero','operator':'Operador'}[record['role']],
+                        'Activo' if record['enabled'] else 'Desactivado'))
+
+    def _selected_user(self):
+        if self.role!='owner':return None
+        selection=self.users_tree.selection()
+        if not selection:
+            messagebox.showwarning('Usuarios','Selecciona un usuario de la tabla.')
+            return None
+        return selection[0]
+
     def _add_user(self):
+        if self.role!='owner':return
         username=simpledialog.askstring('Crear usuario','Usuario (mínimo 3 caracteres):',parent=self)
         if not username:return
         password=simpledialog.askstring('Crear usuario','Contraseña (mínimo 8 caracteres):',parent=self,show='*')
         if password is None:return
-        role=simpledialog.askstring('Crear usuario','Rol: operator / engineer',initialvalue='operator',parent=self)
+        role=simpledialog.askstring('Crear usuario','Rol: owner / engineer / operator',
+                                    initialvalue='operator',parent=self)
         if role is None:return
         try:
             self.users.add_user(username,password,role.strip().lower())
+            self._refresh_users_table()
             messagebox.showinfo('Usuario','Cuenta creada correctamente.')
+        except Exception as exc:messagebox.showerror('Usuario',str(exc))
+
+    def _rename_user(self):
+        name=self._selected_user()
+        if not name:return
+        replacement=simpledialog.askstring('Renombrar usuario',f'Nuevo nombre para {name}:',
+                                           initialvalue=name,parent=self)
+        if not replacement or replacement.strip().lower()==name:return
+        try:
+            new=self.users.update_user(name,new_username=replacement)
+            if name==self.username:
+                self.username=new
+                messagebox.showinfo('Usuario','Tu nombre de cuenta cambió. Se reflejará en el próximo inicio de sesión.')
+            self._refresh_users_table()
+        except Exception as exc:messagebox.showerror('Usuario',str(exc))
+
+    def _change_user_role(self):
+        name=self._selected_user()
+        if not name:return
+        role=simpledialog.askstring('Cambiar rol',f'Nuevo rol de {name}: owner / engineer / operator',
+                                    parent=self)
+        if role is None:return
+        try:
+            if name==self.username:
+                raise ValueError('No cambies tu propio rol durante la sesión. Utiliza otra cuenta de dueño.')
+            self.users.update_user(name,role=role.strip().lower())
+            self._refresh_users_table()
+        except Exception as exc:messagebox.showerror('Usuario',str(exc))
+
+    def _reset_user_password(self):
+        name=self._selected_user()
+        if not name:return
+        password=simpledialog.askstring('Nueva contraseña',f'Nueva contraseña para {name}:',
+                                        parent=self,show='*')
+        if password is None:return
+        confirm=simpledialog.askstring('Confirmar contraseña','Repite la nueva contraseña:',
+                                       parent=self,show='*')
+        if confirm is None:return
+        if password!=confirm:
+            messagebox.showerror('Contraseña','Las contraseñas no coinciden.');return
+        try:
+            self.users.update_user(name,password=password)
+            messagebox.showinfo('Contraseña','Contraseña actualizada.')
+        except Exception as exc:messagebox.showerror('Contraseña',str(exc))
+
+    def _toggle_user_status(self):
+        name=self._selected_user()
+        if not name:return
+        record=next((r for r in self.users.user_details() if r['username']==name),None)
+        if record is None:return
+        if name==self.username:
+            messagebox.showwarning('Usuarios','No desactives tu cuenta mientras tienes sesión iniciada.');return
+        state=not record['enabled']
+        if not messagebox.askyesno('Acceso',f'¿{"Activar" if state else "Desactivar"} a {name}?'):
+            return
+        try:
+            self.users.update_user(name,enabled=state)
+            self._refresh_users_table()
         except Exception as exc:messagebox.showerror('Usuario',str(exc))
 
     def _build_aruco_tab(self, tab):
@@ -691,50 +905,75 @@ class KountApp(tk.Tk):
         right = ttk.Frame(tab)
         right.grid(row=0, column=2, sticky='nsew', padx=3)
         right.columnconfigure(0, weight=1)
-        pane = ttk.LabelFrame(right, text='Edición manual', padding=8)
-        pane.grid(row=0, column=0, sticky='ew')
-        ttk.Label(pane, text='Clase de la BBox').pack(anchor='w')
-        self.bbox_combo = ttk.Combobox(pane, textvariable=self.bbox_class, values=CLASS_NAMES, state='readonly')
-        self.bbox_combo.pack(fill='x', pady=3)
-        ttk.Label(pane, text='Modo al arrastrar').pack(anchor='w', pady=(7, 0))
-        ttk.Combobox(pane, textvariable=self.draw_mode, values=['Nueva', 'Reemplazar seleccionada'],
-                     state='readonly').pack(fill='x', pady=3)
-        btnrow = ttk.Frame(pane)
-        btnrow.pack(fill='x', pady=4)
-        ttk.Button(btnrow, text='Aplicar clase', command=self._change_selected_class).pack(side='left')
-        ttk.Button(btnrow, text='Eliminar BBox', command=self._delete_selected).pack(side='left', padx=5)
-        ttk.Button(pane, text='Guardar BBox de esta imagen', command=self._save_current).pack(fill='x', pady=5)
+        selector=ttk.LabelFrame(right,text='Modo de etiquetado',padding=7)
+        selector.grid(row=0,column=0,sticky='ew')
+        self.bbox_mode_combo=ttk.Combobox(selector,textvariable=self.bbox_editing_mode,
+            values=('Edición manual','Detección auxiliar: escala de grises',
+                    'Preetiquetado con modelo YOLO'),state='readonly')
+        self.bbox_mode_combo.pack(fill='x',pady=2)
+        self.bbox_mode_combo.bind('<<ComboboxSelected>>',self._show_bbox_mode)
+        self.bbox_mode_panels={}
+        pane=ttk.LabelFrame(right,text='Edición manual',padding=7)
+        self.bbox_mode_panels['Edición manual']=pane
+        ttk.Label(pane,text='Clase de la BBox').pack(anchor='w')
+        self.bbox_combo=ttk.Combobox(pane,textvariable=self.bbox_class,values=CLASS_NAMES,state='readonly')
+        self.bbox_combo.pack(fill='x',pady=2)
+        ttk.Label(pane,text='Modo al arrastrar').pack(anchor='w',pady=(4,0))
+        ttk.Combobox(pane,textvariable=self.draw_mode,values=['Nueva','Reemplazar seleccionada'],
+                     state='readonly').pack(fill='x',pady=2)
+        btnrow=ttk.Frame(pane);btnrow.pack(fill='x',pady=3)
+        ttk.Button(btnrow,text='Aplicar clase',command=self._change_selected_class).pack(side='left')
+        ttk.Button(btnrow,text='Eliminar BBox',command=self._delete_selected).pack(side='left',padx=4)
+        ttk.Button(pane,text='Guardar BBox de esta imagen',command=self._save_current).pack(fill='x',pady=3)
 
-        auto = ttk.LabelFrame(right, text='Detección auxiliar: escala de grises', padding=8)
-        auto.grid(row=1, column=0, sticky='ew', pady=(8, 0))
-        row = ttk.Frame(auto); row.pack(fill='x')
-        ttk.Label(row, text='Umbral').pack(side='left')
-        ttk.Entry(row, width=6, textvariable=self.gray_threshold).pack(side='left', padx=4)
-        ttk.Label(row, text='Área mínima').pack(side='left')
-        ttk.Entry(row, width=7, textvariable=self.gray_min_area).pack(side='left', padx=4)
-        ttk.Checkbutton(auto, text='Conservar cajas existentes', variable=self.auto_keep).pack(anchor='w', pady=3)
-        ttk.Button(auto, text='Proponer BBox en esta imagen', command=self._auto_gray_current).pack(fill='x', pady=3)
-        ttk.Button(auto, text='Auto gris en fotos sin etiqueta (lote)', command=self._auto_gray_batch).pack(fill='x', pady=3)
+        auto=ttk.LabelFrame(right,text='Detección auxiliar: escala de grises',padding=7)
+        self.bbox_mode_panels['Detección auxiliar: escala de grises']=auto
+        row=ttk.Frame(auto);row.pack(fill='x')
+        ttk.Label(row,text='Umbral').pack(side='left')
+        ttk.Entry(row,width=6,textvariable=self.gray_threshold).pack(side='left',padx=4)
+        ttk.Label(row,text='Área mínima').pack(side='left')
+        ttk.Entry(row,width=7,textvariable=self.gray_min_area).pack(side='left',padx=4)
+        ttk.Checkbutton(auto,text='Conservar cajas existentes (imagen actual)',
+                        variable=self.auto_keep).pack(anchor='w',pady=3)
+        ttk.Button(auto,text='Proponer BBox en esta imagen',command=self._auto_gray_current).pack(fill='x',pady=2)
+        ttk.Button(auto,text='Auto gris en fotos sin etiqueta (lote)',
+                   command=self._auto_gray_batch).pack(fill='x',pady=2)
 
-        pre = ttk.LabelFrame(right, text='Pre-etiquetar con modelo YOLO anterior', padding=8)
-        pre.grid(row=2, column=0, sticky='ew', pady=(8, 0))
-        ttk.Entry(pre, textvariable=self.prelabel_model).pack(fill='x')
-        ttk.Button(pre, text='Seleccionar best.pt', command=lambda: self._choose_model(self.prelabel_model)).pack(fill='x', pady=3)
-        line = ttk.Frame(pre); line.pack(fill='x')
-        ttk.Label(line, text='Confianza').pack(side='left')
-        ttk.Entry(line, textvariable=self.prelabel_conf, width=8).pack(side='left', padx=6)
-        ttk.Button(pre, text='Pre-etiquetar foto seleccionada', command=self._start_prelabel).pack(fill='x', pady=5)
+        pre=ttk.LabelFrame(right,text='Preetiquetado con modelo YOLO',padding=7)
+        self.bbox_mode_panels['Preetiquetado con modelo YOLO']=pre
+        ttk.Entry(pre,textvariable=self.prelabel_model).pack(fill='x')
+        ttk.Button(pre,text='Seleccionar best.pt',
+                   command=lambda:self._choose_model(self.prelabel_model)).pack(fill='x',pady=3)
+        line=ttk.Frame(pre);line.pack(fill='x')
+        ttk.Label(line,text='Confianza').pack(side='left')
+        ttk.Entry(line,textvariable=self.prelabel_conf,width=8).pack(side='left',padx=6)
+        ttk.Checkbutton(pre,text='Conservar imágenes ya etiquetadas (lote)',
+                        variable=self.prelabel_keep_existing).pack(anchor='w',pady=3)
+        ttk.Button(pre,text='Preetiquetar foto seleccionada',command=self._start_prelabel).pack(fill='x',pady=2)
+        ttk.Button(pre,text='Preetiquetar todas las fotografías',style='Primary.TButton',
+                   command=self._start_prelabel_batch).pack(fill='x',pady=3)
 
         boxes = ttk.LabelFrame(right, text='Objetos de la fotografía', padding=6)
-        boxes.grid(row=3, column=0, sticky='nsew', pady=(8, 0))
-        right.rowconfigure(3, weight=1)
-        self.box_tree = ttk.Treeview(boxes, columns=('clase', 'xyxy'), show='headings', height=7)
+        boxes.grid(row=2, column=0, sticky='nsew', pady=(5, 0))
+        right.rowconfigure(2, weight=1)
+        self.box_tree = ttk.Treeview(boxes, columns=('clase', 'xyxy'), show='headings', height=5)
         self.box_tree.heading('clase', text='Clase')
         self.box_tree.heading('xyxy', text='BBox XYXY')
         self.box_tree.column('clase', width=130)
         self.box_tree.column('xyxy', width=175)
         self.box_tree.pack(fill='both', expand=True)
         self.box_tree.bind('<<TreeviewSelect>>', self._on_box_select)
+        self._show_bbox_mode()
+
+    def _show_bbox_mode(self, _event=None):
+        mode=self.bbox_editing_mode.get()
+        if mode not in self.bbox_mode_panels:
+            mode='Edición manual'
+            self.bbox_editing_mode.set(mode)
+        for panel in self.bbox_mode_panels.values():
+            panel.grid_forget()
+        self.bbox_mode_panels[mode].grid(row=1,column=0,sticky='ew',pady=(5,0))
+        # The annotated-image table remains visible with every mode.
 
     def _build_augment_tab(self, tab):
         tab.columnconfigure(0, weight=2)
@@ -909,6 +1148,14 @@ class KountApp(tk.Tk):
             self._refresh_images()
 
     def _refresh_images(self):
+        if not self._engineering_view():return
+        if not self.active_profile:
+            self.image_files=[]
+            self.orig_list.delete(0,'end')
+            if hasattr(self,'aug_orig_list'):
+                self.aug_orig_list.delete(0,'end')
+                self.aug_gen_list.delete(0,'end')
+            return
         try:
             input_dir, _ = self._get_paths()
             self.image_files = find_images(input_dir)
@@ -1129,6 +1376,9 @@ class KountApp(tk.Tk):
             messagebox.showerror('Umbral gris', str(exc))
 
     def _auto_gray_batch(self):
+        if self.busy:
+            messagebox.showwarning('Proceso activo','Espera a que finalice el proceso anterior.');return
+        if not self.active_profile:return
         if not messagebox.askyesno('Autodetección por lote',
                    'Solo se propondrán BBox para fotos sin anotaciones anteriores. '
                    'Debes revisar visualmente las etiquetas generadas. ¿Continuar?'):
@@ -1138,6 +1388,8 @@ class KountApp(tk.Tk):
         try:
             inp, out = self._get_paths()
             threshold, area = int(self.gray_threshold.get()), int(self.gray_min_area.get())
+            if not (0<=threshold<=255 and area>=1):
+                raise ValueError('Umbral 0–255; área >= 1')
             files = list(self.image_files)
         except Exception as exc:
             messagebox.showerror('Autodetección', str(exc)); return
@@ -1179,6 +1431,43 @@ class KountApp(tk.Tk):
             except Exception as exc:
                 self._emit('error', str(exc))
         self._start_worker('prelabel', worker)
+
+    def _start_prelabel_batch(self):
+        if self.busy:
+            messagebox.showwarning('Proceso activo','Espera a que terminen los procesos anteriores.');return
+        try:
+            inp,out=self._get_paths()
+            model_path=self.prelabel_model.get().strip()
+            if not model_path or not Path(model_path).is_file():
+                raise ValueError('Selecciona primero un modelo YOLO best.pt válido.')
+            confidence=float(self.prelabel_conf.get())
+            if not 0<confidence<1:
+                raise ValueError('La confianza debe ser mayor que 0 y menor que 1.')
+            files=list(self.image_files)
+            if not files:raise ValueError('Este perfil todavía no contiene fotografías.')
+            keep_existing=self.prelabel_keep_existing.get()
+            allowed=set(CLASS_NAMES)
+            if not messagebox.askyesno('Preetiquetado masivo',
+                f'Se analizarán {len(files)} fotografías del perfil activo.\n'
+                +('Se conservarán las anotaciones ya existentes.' if keep_existing else
+                  'ATENCIÓN: se reemplazarán las anotaciones existentes si hay detecciones.')
+                +'\nLas nuevas BBox deben revisarse manualmente. ¿Continuar?'):
+                return
+        except (OSError,ValueError) as exc:
+            messagebox.showerror('Preetiquetado YOLO',str(exc));return
+        if not self._resolve_dirty():return
+        self.status_var.set(f'YOLO por lote: iniciando {len(files)} imágenes…')
+        def worker():
+            try:
+                from .yolo_core import prelabel_images_batch
+                result=prelabel_images_batch(files,inp,out,model_path,confidence,
+                                             allowed,keep_existing,
+                                             progress=lambda done,total,updated:self._emit(
+                                               'prelabel_batch_progress',(done,total,updated)))
+                self._emit('prelabel_batch_done',result)
+            except Exception as exc:
+                self._emit('error',f'Preetiquetado por lote: {exc}')
+        self._start_worker('prelabel_batch',worker)
 
     def _refresh_augment_lists(self):
         self.aug_orig_files = []
@@ -1418,7 +1707,7 @@ class KountApp(tk.Tk):
             messagebox.showwarning('Perfil','Selecciona un perfil autorizado.');return
         try:
             cfg=dict(self.active_profile)
-            if self.role=='operator':
+            if not self._engineering_view():
                 approved=cfg.get('approved_model')
                 if not approved:
                     raise ValueError('El perfil no dispone de un modelo autorizado.')
@@ -1510,7 +1799,7 @@ class KountApp(tk.Tk):
                         self._append_train_log('ERROR: ' + data)
                     messagebox.showerror('Kount-A', data)
                 elif event == 'legacy_done':
-                    if self.role=='engineer':
+                    if self._engineering_view():
                         self._refresh_images()
                         self._refresh_profiles_tab()
                     messagebox.showinfo('Importación v14','Copia completada. Revisa tus imágenes, BBox y modelos antes de entrenar.')
@@ -1547,6 +1836,18 @@ class KountApp(tk.Tk):
                         self.current_objects = read_annotations(inp, self.current_image, out)
                         self._update_box_tree()
                         self._render_editor()
+                elif event == 'prelabel_batch_progress':
+                    done,total,updated=data
+                    self.status_var.set(f'YOLO por lote: {done}/{total} · {updated} imágenes etiquetadas')
+                elif event == 'prelabel_batch_done':
+                    self.status_var.set(f'YOLO por lote terminado: {data["updated"]} etiquetadas, '
+                                        f'{data["skipped"]} conservadas, {data["empty"]} sin detecciones.')
+                    if self.current_image and not self.dirty:
+                        inp,out=self._get_paths()
+                        self.current_objects=read_annotations(inp,self.current_image,out)
+                        self._update_box_tree()
+                        self._render_editor()
+                    messagebox.showinfo('Preetiquetado YOLO',self.status_var.get())
                 elif event == 'prelabel_done':
                     if self.current_image == data['path']:
                         self.current_objects = data['objects']
@@ -1588,7 +1889,7 @@ class KountApp(tk.Tk):
                     self.train_state.set(f'Modelo listo: {data["best_model"]}')
                     self._append_train_log('Entrenamiento completo. best.pt = ' + data['best_model'])
                     self._copy_latest_model()
-                    if self.role=='engineer':self._refresh_profiles_tab()
+                    if self._engineering_view():self._refresh_profiles_tab()
                 elif event == 'test_done':
                     self.test_detections = data['detections']
                     self.test_display_image = data.get('preview')
@@ -1671,7 +1972,7 @@ class KountApp(tk.Tk):
             'train_base', 'train_epochs', 'train_batch', 'train_imgsz',
             'train_lr', 'train_patience', 'train_seed', 'train_val', 'train_test',
             'train_aug', 'train_mosaic', 'test_model', 'prelabel_model', 'gray_threshold',
-            'gray_min_area', 'test_conf', 'test_iou', 'test_maxdet', 'test_mode',
+            'gray_min_area', 'bbox_editing_mode', 'prelabel_keep_existing', 'test_conf', 'test_iou', 'test_maxdet', 'test_mode',
             'camera_width','camera_height','camera_autofocus','camera_focus',
         ]
         payload = {'active_profile': self.active_profile['id'] if self.active_profile else None,
@@ -1685,10 +1986,10 @@ class KountApp(tk.Tk):
             '¿Deseas cerrar igualmente?'
         ):
             return
-        if self.role=='engineer' and not self._resolve_dirty():
+        if self._engineering_view() and not self._resolve_dirty():
             return
         try:
-            if self.role=='engineer': self._save_session()
+            if self._engineering_view(): self._save_session()
         except OSError:
             pass
         self.destroy()
